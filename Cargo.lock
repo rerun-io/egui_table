@@ -492,6 +492,7 @@ name = "egui_table"
 version = "0.28.1"
 dependencies = [
  "egui",
+ "serde",
 ]
 
 [[package]]

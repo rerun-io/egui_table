@@ -39,6 +39,8 @@ pub struct SplitScroll {
 
 /// The contents of a [`SplitScroll`].
 pub trait SplitScrollDelegate {
+    // TODO: add method for prefetching the visible viewport.
+
     /// The fixed portion of the top left corner.
     fn left_top_ui(&mut self, ui: &mut Ui);
 
