@@ -69,8 +69,6 @@ impl SplitScroll {
             let mut rect = ui.cursor();
             rect.max = rect.min + fixed_size + scroll_outer_size;
 
-            // TODO: pass on visible region to delegate
-
             let bottom_right_rect = Rect::from_min_max(rect.min + fixed_size, rect.max);
 
             let scroll_offset = {
@@ -79,7 +77,7 @@ impl SplitScroll {
                 // We could add something like `ScrollArea::with_scroll_bar_rect(bottom_right_rect)`
                 let mut scroll_ui = ui.new_child(UiBuilder::new().max_rect(rect));
                 egui::ScrollArea::new(scroll_enabled)
-                    .show_viewport(&mut scroll_ui, |ui, viewport| {
+                    .show(&mut scroll_ui, |ui| {
                         ui.set_min_size(fixed_size + scroll_content_size);
 
                         let mut shrunk_rect = ui.max_rect();
