@@ -16,8 +16,15 @@ pub struct Column {
 }
 
 impl Column {
+    pub fn new(current: f32, range: impl Into<Rangef>) -> Self {
+        Self {
+            current,
+            range: range.into(),
+        }
+    }
+
     /// Resize columns to fit the total width.
-    pub fn auto_size(columns: &mut [Column], target_width: f32) {
+    pub fn auto_size(columns: &mut [Self], target_width: f32) {
         if columns.is_empty() {
             return;
         }

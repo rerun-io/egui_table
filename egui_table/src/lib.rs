@@ -6,4 +6,4 @@ mod table;
 
 pub use columns::Column;
 pub use split_scroll::{SplitScroll, SplitScrollDelegate};
-pub use table::{Table, TableState};
+pub use table::{Table, TableDelegate, TableState};

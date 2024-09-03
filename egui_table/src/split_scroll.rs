@@ -99,6 +99,7 @@ impl SplitScroll {
                     .with_max_x(rect.left() + fixed_size.x)
                     .with_max_y(rect.top() + fixed_size.y);
                 let mut left_top_ui = ui.new_child(UiBuilder::new().max_rect(left_top_rect));
+                left_top_ui.set_clip_rect(full_clip_rect.intersect(left_top_rect));
                 delegate.left_top_ui(&mut left_top_ui);
             }
 
