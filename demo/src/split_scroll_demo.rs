@@ -31,17 +31,17 @@ impl SplitScrollDelegate for DemoScrollDelegate {
 
     fn right_top_ui(&mut self, ui: &mut Ui) {
         checkerboard(ui);
-        ui.label("Horizontally scrollable");
+        ui.label("Horizontally scrollable. This is where the fixed rows of a table view will go.");
     }
 
     fn left_bottom_ui(&mut self, ui: &mut Ui) {
         checkerboard(ui);
-        ui.label("Vertically scrollable");
+        ui.label("Vertically scrollable. This is where the fixed columns of a table view will go, for instance the row number.");
     }
 
     fn right_bottom_ui(&mut self, ui: &mut Ui) {
         checkerboard(ui);
-        ui.label("Fully scrollable");
+        ui.label("Fully scrollable. This is where the bulk of the table view will go.");
     }
 }
 
