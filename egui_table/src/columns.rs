@@ -1,4 +1,4 @@
-//! Logic for contrained column auto-sizing.
+//! Logic for constrained column auto-sizing.
 
 use egui::Rangef;
 
