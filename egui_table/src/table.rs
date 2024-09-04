@@ -52,7 +52,7 @@ impl Table {
         let mut state: TableState = TableState::load(ui.ctx(), id).unwrap_or_default();
 
         for (i, column) in self.columns.iter_mut().enumerate() {
-            let column_id = Id::new(i); // TODO(emilk): let users set column ids
+            let column_id = column.id(i);
             if let Some(existing_width) = state.col_widths.get(&column_id) {
                 column.current = *existing_width;
             }
@@ -184,7 +184,10 @@ impl<'a> TableSplitScrollDelegate<'a> {
                 cell_ui.set_clip_rect(ui.clip_rect().intersect(cell_rect));
 
                 self.table_delegate.cell_ui(&mut cell_ui, row_nr, col_nr);
-                // TODO: expand if needed
+
+                let column_id = self.table.columns[col_nr].id(col_nr);
+                let width = self.state.col_widths.entry(column_id).or_insert(0.0);
+                *width = width.max(cell_ui.min_size().x);
             }
         }
     }

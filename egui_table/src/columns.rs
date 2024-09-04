@@ -13,6 +13,11 @@ pub struct Column {
     ///
     /// To avoid rounding error you should keep this to a precise value, e.g. a multiple of `0.25`.
     pub range: Rangef,
+
+    /// Optional unique id within the parent table.
+    ///
+    /// If not set, the column index is used.
+    pub id: Option<egui::Id>,
 }
 
 impl Column {
@@ -20,7 +25,13 @@ impl Column {
         Self {
             current,
             range: range.into(),
+            id: None,
         }
+    }
+
+    #[inline]
+    pub fn id(&self, col_idx: usize) -> egui::Id {
+        self.id.unwrap_or_else(|| egui::Id::new(col_idx))
     }
 
     /// Resize columns to fit the total width.
