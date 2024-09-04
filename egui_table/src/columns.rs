@@ -121,10 +121,10 @@ mod tests {
     use super::*;
 
     fn col(c: i32, range: std::ops::RangeInclusive<i32>) -> Column {
-        Column {
-            current: c as f32,
-            range: Rangef::new(*range.start() as f32, *range.end() as f32),
-        }
+        Column::new(
+            c as f32,
+            Rangef::new(*range.start() as f32, *range.end() as f32),
+        )
     }
 
     fn widths(columns: &[Column]) -> Vec<f32> {
