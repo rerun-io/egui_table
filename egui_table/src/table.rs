@@ -71,8 +71,24 @@ impl Default for Table {
     }
 }
 
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct CellInfo {
+    pub col_nr: usize,
+
+    pub row_nr: usize,
+    // We could add more stuff here, like a reference to the column
+}
+
 pub trait TableDelegate {
-    fn cell_ui(&mut self, ui: &mut Ui, row_nr: usize, col_nr: usize);
+    /// Called before any call to [`Self::cell_ui`] to prefetch the range of visible rows.
+    ///
+    /// A first call will contain the sticky rows,
+    /// and a second call will contain the scrollable rows.
+    fn prefetch_rows(&mut self, _row_numbers: std::ops::Range<usize>) {}
+
+    /// The contents of a cell in the table.
+    fn cell_ui(&mut self, ui: &mut Ui, cell: &CellInfo);
 }
 
 impl Table {
@@ -159,6 +175,7 @@ impl Table {
                     sticky_row_y,
                     max_column_widths: vec![0.0; num_columns],
                     visible_column_lines: Default::default(),
+                    prefetched_ranges: Default::default(),
                 },
             );
         });
@@ -188,17 +205,21 @@ struct TableSplitScrollDelegate<'a> {
 
     /// Key is column number. The resizer is to the right of the column.
     visible_column_lines: BTreeMap<usize, ColumnResizer>,
+
+    prefetched_ranges: Vec<std::ops::Range<usize>>,
 }
 
 impl<'a> TableSplitScrollDelegate<'a> {
     fn col_idx_at(&self, x: f32) -> usize {
-        self.col_x.partition_point(|&x0| x0 < x).saturating_sub(1)
+        self.col_x
+            .partition_point(|&col_x| col_x < x)
+            .saturating_sub(1)
     }
 
     fn row_idx_at(&self, y: f32) -> usize {
         if y < *self.sticky_row_y.last() {
             self.sticky_row_y
-                .partition_point(|&y0| y0 < y)
+                .partition_point(|&row_y| row_y < y)
                 .saturating_sub(1)
         } else {
             let y = y - self.sticky_row_y.last();
@@ -227,6 +248,12 @@ impl<'a> TableSplitScrollDelegate<'a> {
         let last_col = self.col_idx_at(viewport.max.x);
         let first_row = self.row_idx_at(viewport.min.y);
         let last_row = self.row_idx_at(viewport.max.y);
+
+        let row_range = first_row..last_row + 1;
+        if !self.prefetched_ranges.contains(&row_range) {
+            self.table_delegate.prefetch_rows(row_range.clone());
+            self.prefetched_ranges.push(row_range);
+        }
 
         for col_nr in first_col..=last_col {
             let Some(column) = self.table.columns.get_mut(col_nr) else {
@@ -268,7 +295,8 @@ impl<'a> TableSplitScrollDelegate<'a> {
                 let mut cell_ui = ui.new_child(ui_builder);
                 cell_ui.set_clip_rect(ui.clip_rect().intersect(cell_rect));
 
-                self.table_delegate.cell_ui(&mut cell_ui, row_nr, col_nr);
+                self.table_delegate
+                    .cell_ui(&mut cell_ui, &CellInfo { col_nr, row_nr });
 
                 let width = &mut self.max_column_widths[col_nr];
                 *width = width.max(cell_ui.min_size().x);

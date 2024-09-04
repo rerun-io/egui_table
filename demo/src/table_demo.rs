@@ -1,4 +1,6 @@
-use egui_table::{AutoSizeMode, Column, Table, TableDelegate};
+use std::ops::Range;
+
+use egui_table::{AutoSizeMode, CellInfo, Column, Table, TableDelegate};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct TableDemo {
@@ -7,6 +9,7 @@ pub struct TableDemo {
     num_sticky_cols: usize,
     default_column: Column,
     auto_size_mode: AutoSizeMode,
+    prefetched_row_ranges: Vec<Range<usize>>,
 }
 
 impl Default for TableDemo {
@@ -17,12 +20,19 @@ impl Default for TableDemo {
             num_sticky_cols: 2,
             default_column: Column::new(100.0, 10.0..=500.0),
             auto_size_mode: AutoSizeMode::default(),
+            prefetched_row_ranges: vec![],
         }
     }
 }
 
 impl TableDelegate for TableDemo {
-    fn cell_ui(&mut self, ui: &mut egui::Ui, row_nr: usize, col_nr: usize) {
+    fn prefetch_rows(&mut self, row_numbers: std::ops::Range<usize>) {
+        self.prefetched_row_ranges.push(row_numbers);
+    }
+
+    fn cell_ui(&mut self, ui: &mut egui::Ui, cell: &CellInfo) {
+        let CellInfo { row_nr, col_nr, .. } = *cell;
+
         ui.add_space(4.0);
 
         if row_nr == 0 {
@@ -43,7 +53,7 @@ impl TableDemo {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("settings").num_columns(2).show(ui, |ui| {
             ui.label("Columns");
-            ui.add(egui::DragValue::new(&mut self.num_columns).speed(1.0));
+            ui.add(egui::DragValue::new(&mut self.num_columns));
             ui.end_row();
 
             ui.label("Rows");
@@ -56,27 +66,19 @@ impl TableDemo {
             ui.end_row();
 
             ui.label("Sticky columns");
-            ui.add(egui::DragValue::new(&mut self.num_sticky_cols).speed(1.0));
+            ui.add(egui::DragValue::new(&mut self.num_sticky_cols));
             ui.end_row();
 
             ui.label("Default column width");
-            ui.add(egui::DragValue::new(&mut self.default_column.current).speed(1.0));
+            ui.add(egui::DragValue::new(&mut self.default_column.current));
             ui.end_row();
 
             ui.label("Column width range");
             ui.horizontal(|ui| {
                 let range = &mut self.default_column.range;
-                ui.add(
-                    egui::DragValue::new(&mut range.min)
-                        .speed(1.0)
-                        .range(0.0..=range.max),
-                );
+                ui.add(egui::DragValue::new(&mut range.min).range(0.0..=range.max));
                 ui.label("to");
-                ui.add(
-                    egui::DragValue::new(&mut range.max)
-                        .speed(1.0)
-                        .range(range.min..=1000.0),
-                );
+                ui.add(egui::DragValue::new(&mut range.max).range(range.min..=1000.0));
             });
             ui.end_row();
 
@@ -91,6 +93,16 @@ impl TableDemo {
                 );
             });
             ui.end_row();
+        });
+
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            ui.label("Prefetched row ranges:");
+            for range in &self.prefetched_row_ranges {
+                ui.label(format!("{}..{}", range.start, range.end));
+            }
+            self.prefetched_row_ranges.clear();
         });
 
         ui.separator();
