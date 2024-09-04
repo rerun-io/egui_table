@@ -2,7 +2,7 @@
 
 use egui::Rangef;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Column {
     /// Current column width.
     ///

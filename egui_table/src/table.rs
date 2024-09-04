@@ -3,10 +3,25 @@ use vec1::Vec1;
 
 use crate::{columns::Column, SplitScroll, SplitScrollDelegate};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub enum AutoSizeMode {
+    /// Never auto-size the columns.
+    Never,
+
+    /// Always auto-size the columns
+    Always,
+
+    /// Auto-size the columns if the parents' width changes
+    #[default]
+    OnParentResize,
+}
+
 #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
 pub struct TableState {
     // Maps columns ids to their widths.
     pub col_widths: IdMap<f32>,
+
+    pub parent_width: Option<f32>,
 }
 
 impl TableState {
@@ -36,6 +51,22 @@ pub struct Table {
 
     /// Total number of rows (sticky + non-sticky).
     pub num_rows: usize,
+
+    pub auto_size_mode: AutoSizeMode,
+}
+
+impl Default for Table {
+    fn default() -> Self {
+        Self {
+            columns: vec![],
+            id_salt: Id::new("table"),
+            num_sticky_cols: 1,
+            sticky_row_heights: vec![16.0],
+            row_height: 16.0,
+            num_rows: 0,
+            auto_size_mode: AutoSizeMode::default(),
+        }
+    }
 }
 
 pub trait TableDelegate {
@@ -56,9 +87,23 @@ impl Table {
             if let Some(existing_width) = state.col_widths.get(&column_id) {
                 column.current = *existing_width;
             }
+            column.current = column.range.clamp(column.current);
         }
 
-        Column::auto_size(&mut self.columns, ui.available_width());
+        let auto_size = match self.auto_size_mode {
+            AutoSizeMode::Never => false,
+            AutoSizeMode::Always => true,
+            AutoSizeMode::OnParentResize => {
+                let parent_width = ui.available_width();
+                let changed = state.parent_width.map_or(true, |w| w != parent_width);
+                state.parent_width = Some(parent_width);
+                changed
+            }
+        };
+
+        if auto_size {
+            Column::auto_size(&mut self.columns, ui.available_width());
+        }
 
         let col_x = {
             let mut x = ui.cursor().min.x;
@@ -88,28 +133,33 @@ impl Table {
             self.sticky_row_heights.iter().sum(),
         );
 
-        SplitScroll {
-            scroll_enabled: Vec2b::new(true, true),
-            fixed_size: sticky_size,
-            scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
-            scroll_content_size: Vec2::new(
-                self.columns[self.num_sticky_cols..]
-                    .iter()
-                    .map(|c| c.current)
-                    .sum(),
-                self.row_height * num_scroll_rows as f32,
-            ),
-        }
-        .show(
-            ui,
-            &mut TableSplitScrollDelegate {
-                table_delegate,
-                state: &mut state,
-                table: &self,
-                col_x,
-                sticky_row_y,
-            },
-        );
+        ui.scope(|ui| {
+            // Don't wrap text in the table cells.
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+
+            SplitScroll {
+                scroll_enabled: Vec2b::new(true, true),
+                fixed_size: sticky_size,
+                scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
+                scroll_content_size: Vec2::new(
+                    self.columns[self.num_sticky_cols..]
+                        .iter()
+                        .map(|c| c.current)
+                        .sum(),
+                    self.row_height * num_scroll_rows as f32,
+                ),
+            }
+            .show(
+                ui,
+                &mut TableSplitScrollDelegate {
+                    table_delegate,
+                    state: &mut state,
+                    table: &self,
+                    col_x,
+                    sticky_row_y,
+                },
+            );
+        });
 
         state.store(ui.ctx(), id);
     }
