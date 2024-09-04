@@ -293,7 +293,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
                     ui_builder = ui_builder.sizing_pass();
                 }
                 let mut cell_ui = ui.new_child(ui_builder);
-                cell_ui.set_clip_rect(ui.clip_rect().intersect(cell_rect));
+                cell_ui.shrink_clip_rect(cell_rect);
 
                 self.table_delegate
                     .cell_ui(&mut cell_ui, &CellInfo { col_nr, row_nr });
