@@ -237,7 +237,8 @@ impl<'a> TableSplitScrollDelegate<'a> {
         } else {
             let y = y - self.sticky_row_y.last();
             let row_nr = (y / self.table.row_height).floor() as u64;
-            self.table.sticky_row_heights.len() as u64 + row_nr
+            (self.table.sticky_row_heights.len() as u64 + row_nr)
+                .at_most(self.table.num_rows.saturating_sub(1))
         }
     }
 
