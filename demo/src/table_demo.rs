@@ -25,6 +25,14 @@ impl Default for TableDemo {
     }
 }
 
+impl TableDemo {
+    fn was_prefetched(&self, row_nr: u64) -> bool {
+        self.prefetched_row_ranges
+            .iter()
+            .any(|range| range.contains(&row_nr))
+    }
+}
+
 impl TableDelegate for TableDemo {
     fn prefetch_rows(&mut self, row_numbers: std::ops::Range<u64>) {
         self.prefetched_row_ranges.push(row_numbers);
@@ -34,6 +42,13 @@ impl TableDelegate for TableDemo {
         let CellInfo { row_nr, col_nr, .. } = *cell;
 
         ui.add_space(4.0);
+
+        if !self.was_prefetched(row_nr) {
+            ui.painter()
+                .rect_filled(ui.max_rect(), 0.0, ui.visuals().error_fg_color);
+            ui.label("ERROR: row not prefetched");
+            return;
+        }
 
         if row_nr == 0 {
             ui.heading(format!("Column {col_nr}"));

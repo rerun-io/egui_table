@@ -75,26 +75,34 @@ impl SplitScroll {
 
             let bottom_right_rect = Rect::from_min_max(rect.min + fixed_size, rect.max);
 
-            let scroll_output = {
+            let scroll_offset = {
                 // RIGHT BOTTOM: fully scrollable.
 
                 // The entire thing is a `ScrollArea` that we then paint over.
                 // PROBLEM: scroll bars show up at the full rect, instead of just the bottom-right.
                 // We could add something like `ScrollArea::with_scroll_bar_rect(bottom_right_rect)`
+
                 let mut scroll_ui = ui.new_child(UiBuilder::new().max_rect(rect));
-                egui::ScrollArea::new(scroll_enabled).show(&mut scroll_ui, |ui| {
-                    ui.set_min_size(fixed_size + scroll_content_size);
+                egui::ScrollArea::new(scroll_enabled)
+                    .show_viewport(&mut scroll_ui, |ui, scroll_offset| {
+                        ui.set_min_size(fixed_size + scroll_content_size);
 
-                    let mut shrunk_rect = ui.max_rect();
-                    shrunk_rect.min += fixed_size;
+                        let mut shrunk_rect = ui.max_rect();
+                        shrunk_rect.min += fixed_size;
 
-                    let mut shrunk_ui = ui.new_child(UiBuilder::new().max_rect(shrunk_rect));
-                    shrunk_ui.shrink_clip_rect(bottom_right_rect);
-                    delegate.right_bottom_ui(&mut shrunk_ui);
-                })
+                        let mut shrunk_ui = ui.new_child(UiBuilder::new().max_rect(shrunk_rect));
+                        shrunk_ui.shrink_clip_rect(bottom_right_rect);
+                        delegate.right_bottom_ui(&mut shrunk_ui);
+
+                        // It is very important that the scroll offset is synced between the
+                        // right-bottom contents of the real scroll area,
+                        // and the fake scroll areas we are painting later.
+                        // The scroll offset that `ScrollArea` returns could be a newer one
+                        // than was used for rendering, so we use the one _actually_ used for rendering instead:
+                        scroll_offset.min
+                    })
+                    .inner
             };
-
-            let scroll_offset = scroll_output.state.offset;
 
             {
                 // LEFT TOP: Fixed

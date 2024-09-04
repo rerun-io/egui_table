@@ -164,6 +164,8 @@ impl Table {
 
             let num_columns = self.columns.len();
 
+            table_delegate.prefetch_rows(0..self.sticky_row_heights.len() as u64);
+
             SplitScroll {
                 scroll_enabled: Vec2b::new(true, true),
                 fixed_size: sticky_size,
@@ -186,7 +188,7 @@ impl Table {
                     sticky_row_y,
                     max_column_widths: vec![0.0; num_columns],
                     visible_column_lines: Default::default(),
-                    prefetched_ranges: Default::default(),
+                    has_prefetched: false,
                 },
             );
         });
@@ -217,7 +219,7 @@ struct TableSplitScrollDelegate<'a> {
     /// Key is column number. The resizer is to the right of the column.
     visible_column_lines: BTreeMap<usize, ColumnResizer>,
 
-    prefetched_ranges: Vec<std::ops::Range<u64>>,
+    has_prefetched: bool,
 }
 
 impl<'a> TableSplitScrollDelegate<'a> {
@@ -251,7 +253,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
         Rect::from_x_y_ranges(x_range, y_range)
     }
 
-    fn region_ui(&mut self, ui: &mut Ui, offset: Vec2) {
+    fn region_ui(&mut self, ui: &mut Ui, offset: Vec2, do_prefetch: bool) {
         // Find the visible range of columns and rows:
         let viewport = ui.clip_rect().translate(offset);
 
@@ -260,10 +262,15 @@ impl<'a> TableSplitScrollDelegate<'a> {
         let first_row = self.row_idx_at(viewport.min.y);
         let last_row = self.row_idx_at(viewport.max.y);
 
-        let row_range = first_row..last_row + 1;
-        if !self.prefetched_ranges.contains(&row_range) {
+        if do_prefetch {
+            let row_range = first_row..last_row + 1;
             self.table_delegate.prefetch_rows(row_range.clone());
-            self.prefetched_ranges.push(row_range);
+            self.has_prefetched = true;
+        } else {
+            debug_assert!(
+                self.has_prefetched,
+                "SplitScroll delegate methods called in unexpected ortder"
+            );
         }
 
         for col_nr in first_col..=last_col {
@@ -329,19 +336,27 @@ impl<'a> TableSplitScrollDelegate<'a> {
 
 impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
     fn left_top_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, Vec2::ZERO);
+        self.region_ui(ui, Vec2::ZERO, false);
     }
 
     fn right_top_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0));
+        self.region_ui(
+            ui,
+            vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0),
+            false,
+        );
     }
 
     fn left_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y));
+        self.region_ui(
+            ui,
+            vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y),
+            false,
+        );
     }
 
     fn right_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min);
+        self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min, true);
     }
 
     fn finish(&mut self, ui: &mut Ui) {
