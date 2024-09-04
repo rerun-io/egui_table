@@ -18,6 +18,26 @@ pub struct Column {
     ///
     /// If not set, the column index is used.
     pub id: Option<egui::Id>,
+
+    /// Can the user resize this column?
+    pub resizable: bool,
+
+    /// If set, we should acurately measure the size of this column this frame
+    /// so that we can correctly auto-size it.
+    /// This is done as a `sizing_pass`.
+    pub auto_size_this_frame: bool,
+}
+
+impl Default for Column {
+    fn default() -> Self {
+        Self {
+            current: 100.0,
+            range: Rangef::new(0.0, f32::INFINITY),
+            id: None,
+            resizable: true,
+            auto_size_this_frame: false,
+        }
+    }
 }
 
 impl Column {
@@ -25,7 +45,7 @@ impl Column {
         Self {
             current,
             range: range.into(),
-            id: None,
+            ..Default::default()
         }
     }
 

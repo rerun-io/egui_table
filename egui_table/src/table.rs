@@ -90,20 +90,16 @@ impl Table {
             column.current = column.range.clamp(column.current);
         }
 
+        let parent_width = ui.available_width();
         let auto_size = match self.auto_size_mode {
             AutoSizeMode::Never => false,
             AutoSizeMode::Always => true,
-            AutoSizeMode::OnParentResize => {
-                let parent_width = ui.available_width();
-                let changed = state.parent_width.map_or(true, |w| w != parent_width);
-                state.parent_width = Some(parent_width);
-                changed
-            }
+            AutoSizeMode::OnParentResize => state.parent_width.map_or(true, |w| w != parent_width),
         };
-
         if auto_size {
-            Column::auto_size(&mut self.columns, ui.available_width());
+            Column::auto_size(&mut self.columns, parent_width);
         }
+        state.parent_width = Some(parent_width);
 
         let col_x = {
             let mut x = ui.cursor().min.x;
@@ -137,6 +133,8 @@ impl Table {
             // Don't wrap text in the table cells.
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
+            let num_columns = self.columns.len();
+
             SplitScroll {
                 scroll_enabled: Vec2b::new(true, true),
                 fixed_size: sticky_size,
@@ -154,9 +152,10 @@ impl Table {
                 &mut TableSplitScrollDelegate {
                     table_delegate,
                     state: &mut state,
-                    table: &self,
+                    table: &mut self,
                     col_x,
                     sticky_row_y,
+                    max_column_widths: vec![0.0; num_columns],
                 },
             );
         });
@@ -167,7 +166,7 @@ impl Table {
 
 struct TableSplitScrollDelegate<'a> {
     table_delegate: &'a mut dyn TableDelegate,
-    table: &'a Table,
+    table: &'a mut Table,
     state: &'a mut TableState,
 
     /// The x coordinate for the start of each column, plus the end of the last column.
@@ -175,6 +174,9 @@ struct TableSplitScrollDelegate<'a> {
 
     /// The y coordinate for the start of each sticky row, plus the end of the last sticky row.
     sticky_row_y: Vec1<f32>,
+
+    /// Actual width of the widest element in each column
+    max_column_widths: Vec<f32>,
 }
 
 impl<'a> TableSplitScrollDelegate<'a> {
@@ -206,7 +208,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
         Rect::from_x_y_ranges(x_range, y_range)
     }
 
-    fn region_ui(&mut self, ui: &mut Ui, offset: Vec2) {
+    fn region_ui(&mut self, ui: &mut Ui, is_lower_half: bool, offset: Vec2) {
         // Find the visible range of columns and rows:
         let viewport = ui.clip_rect().translate(offset);
 
@@ -215,29 +217,128 @@ impl<'a> TableSplitScrollDelegate<'a> {
         let first_row = self.row_idx_at(viewport.min.y);
         let last_row = self.row_idx_at(viewport.max.y);
 
+        for col_nr in first_col..=last_col {
+            let Some(column) = self.table.columns.get_mut(col_nr) else {
+                continue;
+            };
+            if !column.resizable {
+                continue;
+            }
+            let column_id = column.id(col_nr);
+            let column_resize_id = column_id.with("resize");
+            if let Some(response) = ui.ctx().read_response(column_resize_id) {
+                if response.double_clicked() {
+                    column.auto_size_this_frame = true;
+                }
+            }
+        }
+
         for row_nr in first_row..=last_row {
             if self.table.num_rows <= row_nr {
                 break;
             }
             for col_nr in first_col..=last_col {
-                if self.table.columns.len() <= col_nr {
-                    break;
+                let Some(column) = self.table.columns.get(col_nr) else {
+                    continue;
+                };
+
+                let mut cell_rect = self.cell_rect(col_nr, row_nr).translate(-offset);
+                if column.auto_size_this_frame {
+                    cell_rect.max.x = cell_rect.min.x + column.range.min;
                 }
 
-                let cell_rect = self.cell_rect(col_nr, row_nr).translate(-offset);
-
-                let mut cell_ui = ui.new_child(
-                    UiBuilder::new()
-                        .max_rect(cell_rect)
-                        .id_salt((row_nr, col_nr)),
-                );
+                let mut ui_builder = UiBuilder::new()
+                    .max_rect(cell_rect)
+                    .id_salt((row_nr, col_nr));
+                if column.auto_size_this_frame {
+                    ui_builder = ui_builder.sizing_pass();
+                }
+                let mut cell_ui = ui.new_child(ui_builder);
                 cell_ui.set_clip_rect(ui.clip_rect().intersect(cell_rect));
 
                 self.table_delegate.cell_ui(&mut cell_ui, row_nr, col_nr);
 
-                let column_id = self.table.columns[col_nr].id(col_nr);
-                let width = self.state.col_widths.entry(column_id).or_insert(0.0);
+                let width = &mut self.max_column_widths[col_nr];
                 *width = width.max(cell_ui.min_size().x);
+            }
+        }
+
+        if is_lower_half {
+            // Resize interaction:
+            for col_nr in first_col..=last_col {
+                let Some(column) = self.table.columns.get(col_nr) else {
+                    continue;
+                };
+                if !column.resizable {
+                    continue;
+                }
+                let column_id = column.id(col_nr);
+                let used_width = column.range.clamp(self.max_column_widths[col_nr]);
+
+                let column_width = self
+                    .state
+                    .col_widths
+                    .entry(column_id)
+                    .or_insert(column.current);
+
+                if ui.is_sizing_pass() {
+                    // Shrink to fit the widest element in the column:
+                    *column_width = used_width;
+                } else {
+                    // Grow to fit the widest element in the column:
+                    *column_width = column_width.max(used_width);
+                }
+
+                let column_resize_id = column_id.with("resize");
+
+                let x = self.col_x[col_nr + 1] - offset.x; // Rigth side of the column
+                let mut p0 = egui::pos2(x, ui.clip_rect().top());
+                let mut p1 = egui::pos2(x, ui.clip_rect().bottom());
+                let line_rect = egui::Rect::from_min_max(p0, p1)
+                    .expand(ui.style().interaction.resize_grab_radius_side);
+
+                let resize_response =
+                    ui.interact(line_rect, column_resize_id, egui::Sense::click_and_drag());
+
+                if resize_response.dragged() {
+                    if let Some(pointer) = ui.ctx().pointer_latest_pos() {
+                        let mut new_width = *column_width + pointer.x - x;
+
+                        // We don't want to shrink below the size that was actually used.
+                        // However, we still want to allow content that shrinks when you try
+                        // to make the column less wide, so we allow some small shrinkage each frame:
+                        // big enough to allow shrinking over time, small enough not to look ugly when
+                        // shrinking fails. This is a bit of a HACK around immediate mode.
+                        let max_shrinkage_per_frame = 8.0;
+                        new_width = new_width.at_least(used_width - max_shrinkage_per_frame);
+
+                        new_width = column.range.clamp(new_width);
+
+                        let x = x - *column_width + new_width;
+                        (p0.x, p1.x) = (x, x);
+
+                        *column_width = new_width;
+                    }
+                }
+
+                let dragging_something_else =
+                    ui.input(|i| i.pointer.any_down() || i.pointer.any_pressed());
+                let resize_hover = resize_response.hovered() && !dragging_something_else;
+
+                if resize_hover || resize_response.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+                }
+
+                let stroke = if resize_response.dragged() {
+                    ui.style().visuals.widgets.active.bg_stroke
+                } else if resize_hover {
+                    ui.style().visuals.widgets.hovered.bg_stroke
+                } else {
+                    // ui.visuals().widgets.inactive.bg_stroke
+                    ui.visuals().widgets.noninteractive.bg_stroke
+                };
+
+                ui.painter().line_segment([p0, p1], stroke);
             }
         }
     }
@@ -245,18 +346,26 @@ impl<'a> TableSplitScrollDelegate<'a> {
 
 impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
     fn left_top_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, Vec2::ZERO);
+        self.region_ui(ui, false, Vec2::ZERO);
     }
 
     fn right_top_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0));
+        self.region_ui(
+            ui,
+            false,
+            vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0),
+        );
     }
 
     fn left_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y));
+        self.region_ui(
+            ui,
+            true,
+            vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y),
+        );
     }
 
     fn right_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min);
+        self.region_ui(ui, true, ui.clip_rect().min - ui.min_rect().min);
     }
 }
