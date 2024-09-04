@@ -3,18 +3,20 @@ use egui_table::{AutoSizeMode, Column, Table, TableDelegate};
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct TableDemo {
     num_columns: usize,
+    num_rows: usize,
+    num_sticky_cols: usize,
     default_column: Column,
     auto_size_mode: AutoSizeMode,
-    num_rows: usize,
 }
 
 impl Default for TableDemo {
     fn default() -> Self {
         Self {
             num_columns: 10,
-            default_column: Column::new(100.0, 20.0..=500.0),
-            auto_size_mode: AutoSizeMode::default(),
             num_rows: 100,
+            num_sticky_cols: 2,
+            default_column: Column::new(100.0, 10.0..=500.0),
+            auto_size_mode: AutoSizeMode::default(),
         }
     }
 }
@@ -30,7 +32,7 @@ impl TableDelegate for TableDemo {
                 ui.painter()
                     .rect_filled(ui.max_rect(), 0.0, ui.visuals().faint_bg_color);
             }
-            ui.label(format!("row={row_nr}, col={col_nr}"));
+            ui.label(format!("({row_nr}, {col_nr})"));
         }
 
         ui.add_space(4.0);
@@ -42,6 +44,19 @@ impl TableDemo {
         egui::Grid::new("settings").num_columns(2).show(ui, |ui| {
             ui.label("Columns");
             ui.add(egui::DragValue::new(&mut self.num_columns).speed(1.0));
+            ui.end_row();
+
+            ui.label("Rows");
+            let speed = 1.0 + 0.05 * self.num_rows as f32;
+            ui.add(
+                egui::DragValue::new(&mut self.num_rows)
+                    .speed(speed)
+                    .range(0..=10_000),
+            );
+            ui.end_row();
+
+            ui.label("Sticky columns");
+            ui.add(egui::DragValue::new(&mut self.num_sticky_cols).speed(1.0));
             ui.end_row();
 
             ui.label("Default column width");
@@ -76,14 +91,6 @@ impl TableDemo {
                 );
             });
             ui.end_row();
-
-            ui.label("Rows");
-            let speed = 1.0 + 0.05 * self.num_rows as f32;
-            ui.add(
-                egui::DragValue::new(&mut self.num_rows)
-                    .speed(speed)
-                    .range(0..=10_000),
-            );
         });
 
         ui.separator();
@@ -91,7 +98,7 @@ impl TableDemo {
         Table {
             columns: vec![self.default_column; self.num_columns],
             id_salt: egui::Id::new("table_demo"),
-            num_sticky_cols: 1,
+            num_sticky_cols: self.num_sticky_cols,
             sticky_row_heights: vec![20.0; 1],
             row_height: 16.0,
             num_rows: self.num_rows,

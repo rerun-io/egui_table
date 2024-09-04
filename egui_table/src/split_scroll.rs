@@ -74,6 +74,8 @@ impl SplitScroll {
             let bottom_right_rect = Rect::from_min_max(rect.min + fixed_size, rect.max);
 
             let scroll_offset = {
+                // RIGHT BOTTOM: fully scrollable.
+
                 // Entire thing is a scroll region.
                 // PROBLEM: scroll bars show up at the full rect, instead of just the bottom-right.
                 // We could add something like `ScrollArea::with_scroll_bar_rect(bottom_right_rect)`
@@ -94,7 +96,7 @@ impl SplitScroll {
             };
 
             {
-                // Fixed
+                // LEFT TOP: Fixed
                 let left_top_rect = rect
                     .with_max_x(rect.left() + fixed_size.x)
                     .with_max_y(rect.top() + fixed_size.y);
@@ -104,7 +106,7 @@ impl SplitScroll {
             }
 
             {
-                // Horizontally scrollable
+                // RIGHT TOP: Horizontally scrollable
                 let right_top_outer_rect = rect
                     .with_min_x(rect.left() + fixed_size.x)
                     .with_max_y(rect.top() + fixed_size.y);
@@ -119,7 +121,7 @@ impl SplitScroll {
             }
 
             {
-                // Vertically scrollable
+                // LEFT BOTTOM: Vertically scrollable
                 let left_bottom_outer_rect = rect
                     .with_max_x(rect.left() + fixed_size.x)
                     .with_min_y(rect.top() + fixed_size.y);

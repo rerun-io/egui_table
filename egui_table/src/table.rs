@@ -292,7 +292,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
 
                 let column_resize_id = column_id.with("resize");
 
-                let x = self.col_x[col_nr + 1] - offset.x; // Rigth side of the column
+                let x = self.col_x[col_nr + 1] - offset.x; // Right side of the column
                 let mut p0 = egui::pos2(x, ui.clip_rect().top());
                 let mut p1 = egui::pos2(x, ui.clip_rect().bottom());
                 let line_rect = egui::Rect::from_min_max(p0, p1)
