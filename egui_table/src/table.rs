@@ -1,4 +1,4 @@
-use egui::{pos2, vec2, Id, IdMap, NumExt as _, Rect, Ui, UiBuilder, Vec2, Vec2b};
+use egui::{vec2, Id, IdMap, NumExt as _, Rect, Ui, UiBuilder, Vec2, Vec2b};
 use vec1::Vec1;
 
 use crate::{columns::Column, SplitScroll, SplitScrollDelegate};
@@ -129,12 +129,14 @@ struct TableSplitScrollDelegate<'a> {
 
 impl<'a> TableSplitScrollDelegate<'a> {
     fn col_idx_at(&self, x: f32) -> usize {
-        self.col_x.partition_point(|&x0| x0 < x)
+        self.col_x.partition_point(|&x0| x0 < x).saturating_sub(1)
     }
 
     fn row_idx_at(&self, y: f32) -> usize {
         if y < *self.sticky_row_y.last() {
-            self.sticky_row_y.partition_point(|&y0| y0 < y)
+            self.sticky_row_y
+                .partition_point(|&y0| y0 < y)
+                .saturating_sub(1)
         } else {
             let y = y - self.sticky_row_y.last();
             let row_nr = (y / self.table.row_height).floor() as usize;
