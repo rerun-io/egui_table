@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use egui::{vec2, Id, IdMap, NumExt as _, Rect, Ui, UiBuilder, Vec2, Vec2b};
 use vec1::Vec1;
 
@@ -131,7 +133,7 @@ impl Table {
 
         ui.scope(|ui| {
             // Don't wrap text in the table cells.
-            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend); // TODO: I think this is default for horizontal layouts anyway?
 
             let num_columns = self.columns.len();
 
@@ -156,12 +158,18 @@ impl Table {
                     col_x,
                     sticky_row_y,
                     max_column_widths: vec![0.0; num_columns],
+                    visible_column_lines: Default::default(),
                 },
             );
         });
 
         state.store(ui.ctx(), id);
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ColumnResizer {
+    offset: Vec2,
 }
 
 struct TableSplitScrollDelegate<'a> {
@@ -177,6 +185,9 @@ struct TableSplitScrollDelegate<'a> {
 
     /// Actual width of the widest element in each column
     max_column_widths: Vec<f32>,
+
+    /// Key is column number. The resizer is to the right of the column.
+    visible_column_lines: BTreeMap<usize, ColumnResizer>,
 }
 
 impl<'a> TableSplitScrollDelegate<'a> {
@@ -208,7 +219,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
         Rect::from_x_y_ranges(x_range, y_range)
     }
 
-    fn region_ui(&mut self, ui: &mut Ui, is_lower_half: bool, offset: Vec2) {
+    fn region_ui(&mut self, ui: &mut Ui, offset: Vec2) {
         // Find the visible range of columns and rows:
         let viewport = ui.clip_rect().translate(offset);
 
@@ -264,82 +275,14 @@ impl<'a> TableSplitScrollDelegate<'a> {
             }
         }
 
-        if is_lower_half {
-            // Resize interaction:
-            for col_nr in first_col..=last_col {
-                let Some(column) = self.table.columns.get(col_nr) else {
-                    continue;
-                };
-                if !column.resizable {
-                    continue;
-                }
-                let column_id = column.id(col_nr);
-                let used_width = column.range.clamp(self.max_column_widths[col_nr]);
-
-                let column_width = self
-                    .state
-                    .col_widths
-                    .entry(column_id)
-                    .or_insert(column.current);
-
-                if ui.is_sizing_pass() || column.auto_size_this_frame {
-                    // Shrink to fit the widest element in the column:
-                    *column_width = used_width;
-                } else {
-                    // Grow to fit the widest element in the column:
-                    *column_width = column_width.max(used_width);
-                }
-
-                let column_resize_id = column_id.with("resize");
-
-                let x = self.col_x[col_nr + 1] - offset.x; // Right side of the column
-                let mut p0 = egui::pos2(x, ui.clip_rect().top());
-                let mut p1 = egui::pos2(x, ui.clip_rect().bottom());
-                let line_rect = egui::Rect::from_min_max(p0, p1)
-                    .expand(ui.style().interaction.resize_grab_radius_side);
-
-                let resize_response =
-                    ui.interact(line_rect, column_resize_id, egui::Sense::click_and_drag());
-
-                if resize_response.dragged() {
-                    if let Some(pointer) = ui.ctx().pointer_latest_pos() {
-                        let mut new_width = *column_width + pointer.x - x;
-
-                        // We don't want to shrink below the size that was actually used.
-                        // However, we still want to allow content that shrinks when you try
-                        // to make the column less wide, so we allow some small shrinkage each frame:
-                        // big enough to allow shrinking over time, small enough not to look ugly when
-                        // shrinking fails. This is a bit of a HACK around immediate mode.
-                        let max_shrinkage_per_frame = 8.0;
-                        new_width = new_width.at_least(used_width - max_shrinkage_per_frame);
-
-                        new_width = column.range.clamp(new_width);
-
-                        let x = x - *column_width + new_width;
-                        (p0.x, p1.x) = (x, x);
-
-                        *column_width = new_width;
-                    }
-                }
-
-                let dragging_something_else =
-                    ui.input(|i| i.pointer.any_down() || i.pointer.any_pressed());
-                let resize_hover = resize_response.hovered() && !dragging_something_else;
-
-                if resize_hover || resize_response.dragged() {
-                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
-                }
-
-                let stroke = if resize_response.dragged() {
-                    ui.style().visuals.widgets.active.bg_stroke
-                } else if resize_hover {
-                    ui.style().visuals.widgets.hovered.bg_stroke
-                } else {
-                    // ui.visuals().widgets.inactive.bg_stroke
-                    ui.visuals().widgets.noninteractive.bg_stroke
-                };
-
-                ui.painter().line_segment([p0, p1], stroke);
+        // Resize interaction:
+        for col_nr in first_col..=last_col {
+            let Some(column) = self.table.columns.get(col_nr) else {
+                continue;
+            };
+            if column.resizable {
+                self.visible_column_lines
+                    .insert(col_nr, ColumnResizer { offset });
             }
         }
     }
@@ -347,26 +290,95 @@ impl<'a> TableSplitScrollDelegate<'a> {
 
 impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
     fn left_top_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, false, Vec2::ZERO);
+        self.region_ui(ui, Vec2::ZERO);
     }
 
     fn right_top_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(
-            ui,
-            false,
-            vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0),
-        );
+        self.region_ui(ui, vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0));
     }
 
     fn left_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(
-            ui,
-            true,
-            vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y),
-        );
+        self.region_ui(ui, vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y));
     }
 
     fn right_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, true, ui.clip_rect().min - ui.min_rect().min);
+        self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min);
+    }
+
+    fn finish(&mut self, ui: &mut Ui) {
+        // Paint column resize lines
+
+        for (col_nr, ColumnResizer { offset }) in &self.visible_column_lines {
+            let col_nr = *col_nr;
+            let Some(column) = self.table.columns.get(col_nr) else {
+                continue;
+            };
+            if !column.resizable {
+                continue;
+            }
+
+            let column_id = column.id(col_nr);
+            let used_width = column.range.clamp(self.max_column_widths[col_nr]);
+
+            let column_width = self
+                .state
+                .col_widths
+                .entry(column_id)
+                .or_insert(column.current);
+
+            if ui.is_sizing_pass() || column.auto_size_this_frame {
+                // Shrink to fit the widest element in the column:
+                *column_width = used_width;
+            } else {
+                // Grow to fit the widest element in the column:
+                *column_width = column_width.max(used_width);
+            }
+
+            let column_resize_id = column_id.with("resize");
+
+            let mut x = self.col_x[col_nr + 1] - offset.x; // Right side of the column
+            let yrange = ui.clip_rect().y_range();
+            let line_rect = egui::Rect::from_x_y_ranges(x..=x, yrange)
+                .expand(ui.style().interaction.resize_grab_radius_side);
+
+            let resize_response =
+                ui.interact(line_rect, column_resize_id, egui::Sense::click_and_drag());
+
+            if resize_response.dragged() {
+                if let Some(pointer) = ui.ctx().pointer_latest_pos() {
+                    let mut new_width = *column_width + pointer.x - x;
+
+                    // We don't want to shrink below the size that was actually used.
+                    // However, we still want to allow content that shrinks when you try
+                    // to make the column less wide, so we allow some small shrinkage each frame:
+                    // big enough to allow shrinking over time, small enough not to look ugly when
+                    // shrinking fails. This is a bit of a HACK around immediate mode.
+                    let max_shrinkage_per_frame = 8.0;
+                    new_width = new_width.at_least(used_width - max_shrinkage_per_frame);
+                    new_width = column.range.clamp(new_width);
+                    x += new_width - *column_width;
+                    *column_width = new_width;
+                }
+            }
+
+            let dragging_something_else =
+                ui.input(|i| i.pointer.any_down() || i.pointer.any_pressed());
+            let resize_hover = resize_response.hovered() && !dragging_something_else;
+
+            if resize_hover || resize_response.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+            }
+
+            let stroke = if resize_response.dragged() {
+                ui.style().visuals.widgets.active.bg_stroke
+            } else if resize_hover {
+                ui.style().visuals.widgets.hovered.bg_stroke
+            } else {
+                // ui.visuals().widgets.inactive.bg_stroke
+                ui.visuals().widgets.noninteractive.bg_stroke
+            };
+
+            ui.painter().vline(x, yrange, stroke);
+        }
     }
 }

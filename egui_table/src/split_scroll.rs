@@ -52,6 +52,9 @@ pub trait SplitScrollDelegate {
 
     /// The fully scrollable portion.
     fn right_bottom_ui(&mut self, ui: &mut Ui);
+
+    /// Called last.
+    fn finish(&mut self, _ui: &mut Ui) {}
 }
 
 impl SplitScroll {
@@ -70,30 +73,30 @@ impl SplitScroll {
 
             let mut rect = ui.cursor();
             rect.max = rect.min + fixed_size + scroll_outer_size;
+            ui.set_clip_rect(rect);
 
             let bottom_right_rect = Rect::from_min_max(rect.min + fixed_size, rect.max);
 
-            let scroll_offset = {
+            let scroll_output = {
                 // RIGHT BOTTOM: fully scrollable.
 
-                // Entire thing is a scroll region.
+                // The entire thing is a `ScrollArea` that we then paint over.
                 // PROBLEM: scroll bars show up at the full rect, instead of just the bottom-right.
                 // We could add something like `ScrollArea::with_scroll_bar_rect(bottom_right_rect)`
                 let mut scroll_ui = ui.new_child(UiBuilder::new().max_rect(rect));
-                egui::ScrollArea::new(scroll_enabled)
-                    .show(&mut scroll_ui, |ui| {
-                        ui.set_min_size(fixed_size + scroll_content_size);
+                egui::ScrollArea::new(scroll_enabled).show(&mut scroll_ui, |ui| {
+                    ui.set_min_size(fixed_size + scroll_content_size);
 
-                        let mut shrunk_rect = ui.max_rect();
-                        shrunk_rect.min += fixed_size;
+                    let mut shrunk_rect = ui.max_rect();
+                    shrunk_rect.min += fixed_size;
 
-                        let mut shrunk_ui = ui.new_child(UiBuilder::new().max_rect(shrunk_rect));
-                        shrunk_ui.set_clip_rect(full_clip_rect.intersect(bottom_right_rect));
-                        delegate.right_bottom_ui(&mut shrunk_ui);
-                    })
-                    .state
-                    .offset
+                    let mut shrunk_ui = ui.new_child(UiBuilder::new().max_rect(shrunk_rect));
+                    shrunk_ui.set_clip_rect(full_clip_rect.intersect(bottom_right_rect));
+                    delegate.right_bottom_ui(&mut shrunk_ui);
+                })
             };
+
+            let scroll_offset = scroll_output.state.offset;
 
             {
                 // LEFT TOP: Fixed
@@ -134,6 +137,8 @@ impl SplitScroll {
                 left_bottom_ui.set_clip_rect(full_clip_rect.intersect(left_bottom_outer_rect));
                 delegate.left_bottom_ui(&mut left_bottom_ui);
             }
+
+            delegate.finish(ui);
         });
     }
 }
