@@ -47,6 +47,7 @@ impl TableDelegate for TableDemo {
             ui.painter()
                 .rect_filled(ui.max_rect(), 0.0, ui.visuals().error_fg_color);
             ui.label("ERROR: row not prefetched");
+            log::warn!("Was asked to show row {row_nr} which was not prefetched! This is a bug.");
             return;
         }
 
@@ -66,18 +67,21 @@ impl TableDelegate for TableDemo {
 
 impl TableDemo {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        egui::Grid::new("settings").num_columns(2).show(ui, |ui| {
+        egui::Grid::new("settings").show(ui, |ui| {
             ui.label("Columns");
             ui.add(egui::DragValue::new(&mut self.num_columns));
             ui.end_row();
 
             ui.label("Rows");
             let speed = 1.0 + 0.05 * self.num_rows as f32;
-            ui.add(
-                egui::DragValue::new(&mut self.num_rows)
-                    .speed(speed)
-                    .range(0..=10_000),
-            );
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::DragValue::new(&mut self.num_rows)
+                        .speed(speed)
+                        .range(0..=10_000),
+                );
+                ui.weak("(includes header row)");
+            });
             ui.end_row();
 
             ui.label("Sticky columns");

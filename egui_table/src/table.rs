@@ -230,7 +230,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
     }
 
     fn row_idx_at(&self, y: f32) -> u64 {
-        if y < *self.sticky_row_y.last() {
+        if y <= *self.sticky_row_y.last() {
             self.sticky_row_y
                 .partition_point(|&row_y| row_y < y)
                 .saturating_sub(1) as u64
