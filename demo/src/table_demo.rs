@@ -5,11 +5,11 @@ use egui_table::{AutoSizeMode, CellInfo, Column, Table, TableDelegate};
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct TableDemo {
     num_columns: usize,
-    num_rows: usize,
+    num_rows: u64,
     num_sticky_cols: usize,
     default_column: Column,
     auto_size_mode: AutoSizeMode,
-    prefetched_row_ranges: Vec<Range<usize>>,
+    prefetched_row_ranges: Vec<Range<u64>>,
 }
 
 impl Default for TableDemo {
@@ -26,7 +26,7 @@ impl Default for TableDemo {
 }
 
 impl TableDelegate for TableDemo {
-    fn prefetch_rows(&mut self, row_numbers: std::ops::Range<usize>) {
+    fn prefetch_rows(&mut self, row_numbers: std::ops::Range<u64>) {
         self.prefetched_row_ranges.push(row_numbers);
     }
 

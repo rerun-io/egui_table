@@ -52,7 +52,7 @@ pub struct Table {
     pub row_height: f32,
 
     /// Total number of rows (sticky + non-sticky).
-    pub num_rows: usize,
+    pub num_rows: u64,
 
     pub auto_size_mode: AutoSizeMode,
 }
@@ -76,7 +76,7 @@ impl Default for Table {
 pub struct CellInfo {
     pub col_nr: usize,
 
-    pub row_nr: usize,
+    pub row_nr: u64,
     // We could add more stuff here, like a reference to the column
 }
 
@@ -85,7 +85,7 @@ pub trait TableDelegate {
     ///
     /// A first call will contain the sticky rows,
     /// and a second call will contain the scrollable rows.
-    fn prefetch_rows(&mut self, _row_numbers: std::ops::Range<usize>) {}
+    fn prefetch_rows(&mut self, _row_numbers: std::ops::Range<u64>) {}
 
     /// The contents of a cell in the table.
     fn cell_ui(&mut self, ui: &mut Ui, cell: &CellInfo);
@@ -94,8 +94,8 @@ pub trait TableDelegate {
 impl Table {
     pub fn show(mut self, ui: &mut Ui, table_delegate: &mut dyn TableDelegate) {
         self.num_sticky_cols = self.num_sticky_cols.at_most(self.columns.len());
-        self.num_rows = self.num_rows.at_least(self.sticky_row_heights.len());
-        let num_scroll_rows = self.num_rows - self.sticky_row_heights.len();
+        self.num_rows = self.num_rows.at_least(self.sticky_row_heights.len() as u64);
+        let num_scroll_rows = self.num_rows - self.sticky_row_heights.len() as u64;
 
         let id = ui.make_persistent_id(self.id_salt);
         let mut state: TableState = TableState::load(ui.ctx(), id).unwrap_or_default();
@@ -206,7 +206,7 @@ struct TableSplitScrollDelegate<'a> {
     /// Key is column number. The resizer is to the right of the column.
     visible_column_lines: BTreeMap<usize, ColumnResizer>,
 
-    prefetched_ranges: Vec<std::ops::Range<usize>>,
+    prefetched_ranges: Vec<std::ops::Range<u64>>,
 }
 
 impl<'a> TableSplitScrollDelegate<'a> {
@@ -216,24 +216,24 @@ impl<'a> TableSplitScrollDelegate<'a> {
             .saturating_sub(1)
     }
 
-    fn row_idx_at(&self, y: f32) -> usize {
+    fn row_idx_at(&self, y: f32) -> u64 {
         if y < *self.sticky_row_y.last() {
             self.sticky_row_y
                 .partition_point(|&row_y| row_y < y)
-                .saturating_sub(1)
+                .saturating_sub(1) as u64
         } else {
             let y = y - self.sticky_row_y.last();
-            let row_nr = (y / self.table.row_height).floor() as usize;
-            self.table.sticky_row_heights.len() + row_nr
+            let row_nr = (y / self.table.row_height).floor() as u64;
+            self.table.sticky_row_heights.len() as u64 + row_nr
         }
     }
 
-    fn cell_rect(&self, col: usize, row: usize) -> Rect {
+    fn cell_rect(&self, col: usize, row: u64) -> Rect {
         let x_range = self.col_x[col]..=self.col_x[col + 1];
-        let y_range = if row < self.table.sticky_row_heights.len() {
-            self.sticky_row_y[row]..=self.sticky_row_y[row + 1]
+        let y_range = if row < self.table.sticky_row_heights.len() as u64 {
+            self.sticky_row_y[row as usize]..=self.sticky_row_y[row as usize + 1]
         } else {
-            let row = row - self.table.sticky_row_heights.len();
+            let row = row - self.table.sticky_row_heights.len() as u64;
             let y = self.sticky_row_y.last() + row as f32 * self.table.row_height;
             y..=y + self.table.row_height
         };
