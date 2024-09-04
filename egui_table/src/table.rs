@@ -5,16 +5,17 @@ use vec1::Vec1;
 
 use crate::{columns::Column, SplitScroll, SplitScrollDelegate};
 
+// TODO: fix the functionality of this
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum AutoSizeMode {
     /// Never auto-size the columns.
+    #[default]
     Never,
 
     /// Always auto-size the columns
     Always,
 
     /// Auto-size the columns if the parents' width changes
-    #[default]
     OnParentResize,
 }
 
@@ -33,6 +34,16 @@ impl TableState {
 
     pub fn store(self, ctx: &egui::Context, id: Id) {
         ctx.data_mut(|d| d.insert_persisted(id, self));
+    }
+
+    pub fn id(ui: &Ui, id_salt: Id) -> Id {
+        ui.make_persistent_id(id_salt)
+    }
+
+    pub fn reset(ctx: &egui::Context, id: Id) {
+        ctx.data_mut(|d| {
+            d.remove::<Self>(id);
+        });
     }
 }
 
@@ -97,7 +108,7 @@ impl Table {
         self.num_rows = self.num_rows.at_least(self.sticky_row_heights.len() as u64);
         let num_scroll_rows = self.num_rows - self.sticky_row_heights.len() as u64;
 
-        let id = ui.make_persistent_id(self.id_salt);
+        let id = TableState::id(ui, self.id_salt);
         let mut state: TableState = TableState::load(ui.ctx(), id).unwrap_or_default();
 
         for (i, column) in self.columns.iter_mut().enumerate() {

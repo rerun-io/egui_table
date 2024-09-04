@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use egui_table::{AutoSizeMode, CellInfo, Column, Table, TableDelegate};
+use egui_table::{AutoSizeMode, CellInfo, Column, Table, TableDelegate, TableState};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct TableDemo {
@@ -17,7 +17,7 @@ impl Default for TableDemo {
         Self {
             num_columns: 10,
             num_rows: 100,
-            num_sticky_cols: 2,
+            num_sticky_cols: 1,
             default_column: Column::new(100.0, 10.0..=500.0),
             auto_size_mode: AutoSizeMode::default(),
             prefetched_row_ranges: vec![],
@@ -95,6 +95,22 @@ impl TableDemo {
             ui.end_row();
         });
 
+        let id_salt = egui::Id::new("table_demo");
+        let state_id = TableState::id(ui, id_salt); // Note: must be here (in the correct outer `ui` scope) to be correct.
+
+        ui.horizontal(|ui| {
+            if ui.button("Reset settings").clicked() {
+                *self = Self::default();
+            }
+            if ui.button("Reset state").clicked() {
+                debug_assert!(
+                    TableState::load(ui.ctx(), state_id).is_some(),
+                    "Wrong state_id"
+                );
+                TableState::reset(ui.ctx(), state_id);
+            }
+        });
+
         ui.separator();
 
         ui.horizontal(|ui| {
@@ -109,7 +125,7 @@ impl TableDemo {
 
         Table {
             columns: vec![self.default_column; self.num_columns],
-            id_salt: egui::Id::new("table_demo"),
+            id_salt,
             num_sticky_cols: self.num_sticky_cols,
             sticky_row_heights: vec![20.0; 1],
             row_height: 16.0,

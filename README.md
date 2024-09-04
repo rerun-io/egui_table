@@ -11,6 +11,7 @@ Work-in-progress. Pre-release.
 * Fix auto-sizing on parent resize
 * Test with `egui::Sides`
 * Test with truncating content
+* Go through TODOs
 
 
 ### Testing
