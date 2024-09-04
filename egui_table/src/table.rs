@@ -282,7 +282,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
                     .entry(column_id)
                     .or_insert(column.current);
 
-                if ui.is_sizing_pass() {
+                if ui.is_sizing_pass() || column.auto_size_this_frame {
                     // Shrink to fit the widest element in the column:
                     *column_width = used_width;
                 } else {

@@ -5,14 +5,16 @@ pub struct TableDemo {
     num_columns: usize,
     default_column: Column,
     auto_size_mode: AutoSizeMode,
+    num_rows: usize,
 }
 
 impl Default for TableDemo {
     fn default() -> Self {
         Self {
             num_columns: 10,
-            default_column: Column::new(100.0, 100.0..=200.0),
+            default_column: Column::new(100.0, 20.0..=500.0),
             auto_size_mode: AutoSizeMode::default(),
+            num_rows: 100,
         }
     }
 }
@@ -73,6 +75,15 @@ impl TableDemo {
                     "OnParentResize",
                 );
             });
+            ui.end_row();
+
+            ui.label("Rows");
+            let speed = 1.0 + 0.05 * self.num_rows as f32;
+            ui.add(
+                egui::DragValue::new(&mut self.num_rows)
+                    .speed(speed)
+                    .range(0..=10_000),
+            );
         });
 
         ui.separator();
@@ -83,7 +94,7 @@ impl TableDemo {
             num_sticky_cols: 1,
             sticky_row_heights: vec![20.0; 1],
             row_height: 16.0,
-            num_rows: 100,
+            num_rows: self.num_rows,
             auto_size_mode: self.auto_size_mode,
         }
         .show(ui, self);
