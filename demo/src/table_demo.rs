@@ -19,7 +19,19 @@ impl Default for TableDemo {
 
 impl TableDelegate for TableDemo {
     fn cell_ui(&mut self, ui: &mut egui::Ui, row_nr: usize, col_nr: usize) {
-        ui.label(format!("row={row_nr}, col={col_nr}"));
+        ui.add_space(4.0);
+
+        if row_nr == 0 {
+            ui.heading(format!("Column {col_nr}"));
+        } else {
+            if row_nr % 2 == 1 {
+                ui.painter()
+                    .rect_filled(ui.max_rect(), 0.0, ui.visuals().faint_bg_color);
+            }
+            ui.label(format!("row={row_nr}, col={col_nr}"));
+        }
+
+        ui.add_space(4.0);
     }
 }
 
@@ -36,9 +48,18 @@ impl TableDemo {
 
             ui.label("Column width range");
             ui.horizontal(|ui| {
-                ui.add(egui::DragValue::new(&mut self.default_column.range.min).speed(1.0));
+                let range = &mut self.default_column.range;
+                ui.add(
+                    egui::DragValue::new(&mut range.min)
+                        .speed(1.0)
+                        .range(0.0..=range.max),
+                );
                 ui.label("to");
-                ui.add(egui::DragValue::new(&mut self.default_column.range.max).speed(1.0));
+                ui.add(
+                    egui::DragValue::new(&mut range.max)
+                        .speed(1.0)
+                        .range(range.min..=1000.0),
+                );
             });
             ui.end_row();
 

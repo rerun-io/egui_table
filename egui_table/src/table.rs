@@ -249,7 +249,8 @@ impl<'a> TableSplitScrollDelegate<'a> {
 
                 let mut ui_builder = UiBuilder::new()
                     .max_rect(cell_rect)
-                    .id_salt((row_nr, col_nr));
+                    .id_salt((row_nr, col_nr))
+                    .layout(egui::Layout::left_to_right(egui::Align::Center));
                 if column.auto_size_this_frame {
                     ui_builder = ui_builder.sizing_pass();
                 }
