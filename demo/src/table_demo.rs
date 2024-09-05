@@ -199,7 +199,10 @@ impl TableDemo {
             columns: vec![self.default_column; self.num_columns],
             id_salt,
             num_sticky_cols: self.num_sticky_cols,
-            headers: vec![egui_table::Header::new(self.top_row_height); 1],
+            headers: vec![
+                egui_table::HeaderRow::new(self.top_row_height),
+                egui_table::HeaderRow::new(self.top_row_height),
+            ],
             row_height: self.row_height,
             num_rows: self.num_rows,
             auto_size_mode: self.auto_size_mode,

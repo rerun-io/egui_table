@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use egui::{vec2, Id, IdMap, NumExt as _, Rect, Ui, UiBuilder, Vec2, Vec2b};
+use egui::{vec2, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b};
 use vec1::Vec1;
 
 use crate::{columns::Column, SplitScroll, SplitScrollDelegate};
@@ -48,13 +48,19 @@ impl TableState {
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct Header {
+pub struct HeaderRow {
     height: f32,
+
+    ///
+    groups: Vec<usize>,
 }
 
-impl Header {
+impl HeaderRow {
     pub fn new(height: f32) -> Self {
-        Self { height }
+        Self {
+            height,
+            groups: Default::default(),
+        }
     }
 }
 
@@ -86,7 +92,7 @@ pub struct Table {
     pub num_sticky_cols: usize,
 
     /// The count and parameters of the sticky (non-scrolling) header rows.
-    pub headers: Vec<Header>,
+    pub headers: Vec<HeaderRow>,
 
     /// Height of the non-sticky rows.
     pub row_height: f32,
@@ -103,7 +109,7 @@ impl Default for Table {
             columns: vec![],
             id_salt: Id::new("table"),
             num_sticky_cols: 1,
-            headers: vec![Header::new(16.0)],
+            headers: vec![HeaderRow::new(16.0)],
             row_height: 16.0,
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
@@ -283,55 +289,13 @@ struct TableSplitScrollDelegate<'a> {
 }
 
 impl<'a> TableSplitScrollDelegate<'a> {
-    fn col_idx_at(&self, x: f32) -> usize {
-        self.col_x
-            .partition_point(|&col_x| col_x < x)
-            .saturating_sub(1)
-    }
-
-    fn header_row_idx_at(&self, y: f32) -> u64 {
-        self.header_row_y
-            .partition_point(|&row_y| row_y < y)
-            .saturating_sub(1) as u64
-    }
-
-    fn row_idx_at(&self, y: f32) -> u64 {
-        let y = y - self.header_row_y.last();
-        let row_nr = (y / self.table.row_height).floor() as u64;
-        row_nr.at_most(self.table.num_rows.saturating_sub(1))
-    }
-
     fn header_ui(&mut self, ui: &mut Ui, offset: Vec2) {
-        // Find the visible range of columns and rows:
-        let viewport = ui.clip_rect().translate(offset);
-
-        let (first_col, last_col) = if self.do_full_sizing_pass {
-            // We do the UI for all columns during a sizing pass, so we can auto-size ALL columns
-            (0, self.col_x.len() - 1)
-        } else {
-            // Only paint the visible columns, as an optimization
-            (
-                self.col_idx_at(viewport.min.x),
-                self.col_idx_at(viewport.max.x),
-            )
-        };
-        let first_row = self.header_row_idx_at(viewport.min.y);
-        let last_row = self.header_row_idx_at(viewport.max.y);
-
-        for row_nr in first_row..=last_row {
-            if self.table.num_rows <= row_nr {
-                break;
-            }
-            for col_nr in first_col..=last_col {
-                let Some(column) = self.table.columns.get(col_nr) else {
-                    continue;
-                };
-
-                let mut cell_rect = Rect::from_x_y_ranges(
-                    self.col_x[col_nr]..=self.col_x[col_nr + 1],
-                    self.header_row_y[row_nr as usize]..=self.header_row_y[row_nr as usize + 1],
-                )
-                .translate(-offset);
+        for (row_nr, header_row) in self.table.headers.iter().enumerate() {
+            let y_range = Rangef::new(self.header_row_y[row_nr], self.header_row_y[row_nr + 1]);
+            for (col_nr, column) in self.table.columns.iter().enumerate() {
+                let mut cell_rect =
+                    Rect::from_x_y_ranges(self.col_x[col_nr]..=self.col_x[col_nr + 1], y_range)
+                        .translate(-offset);
                 let clip_rect = cell_rect; // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
                 if column.auto_size_this_frame {
                     cell_rect.max.x = cell_rect.min.x + column.range.min;
@@ -347,27 +311,39 @@ impl<'a> TableSplitScrollDelegate<'a> {
                 let mut cell_ui = ui.new_child(ui_builder);
                 cell_ui.shrink_clip_rect(clip_rect);
 
-                self.table_delegate
-                    .header_cell_ui(&mut cell_ui, &CellInfo { col_nr, row_nr });
+                self.table_delegate.header_cell_ui(
+                    &mut cell_ui,
+                    &CellInfo {
+                        col_nr,
+                        row_nr: row_nr as u64,
+                    },
+                );
 
                 let width = &mut self.max_column_widths[col_nr];
                 *width = width.max(cell_ui.min_size().x);
-            }
-        }
 
-        // Save column lines for later interaction:
-        for col_nr in first_col..=last_col {
-            let Some(column) = self.table.columns.get(col_nr) else {
-                continue;
-            };
-            if column.resizable {
-                self.visible_column_lines
-                    .insert(col_nr, ColumnResizer { offset });
+                // Save column lines for later interaction:
+                if column.resizable {
+                    self.visible_column_lines
+                        .insert(col_nr, ColumnResizer { offset });
+                }
             }
         }
     }
 
     fn region_ui(&mut self, ui: &mut Ui, offset: Vec2, do_prefetch: bool) {
+        let col_idx_at = |x: f32| -> usize {
+            self.col_x
+                .partition_point(|&col_x| col_x < x)
+                .saturating_sub(1)
+        };
+
+        let row_idx_at = |y: f32| -> u64 {
+            let y = y - self.header_row_y.last();
+            let row_nr = (y / self.table.row_height).floor() as u64;
+            row_nr.at_most(self.table.num_rows.saturating_sub(1))
+        };
+
         // Find the visible range of columns and rows:
         let viewport = ui.clip_rect().translate(offset);
 
@@ -376,13 +352,10 @@ impl<'a> TableSplitScrollDelegate<'a> {
             (0, self.col_x.len() - 1)
         } else {
             // Only paint the visible columns, as an optimization
-            (
-                self.col_idx_at(viewport.min.x),
-                self.col_idx_at(viewport.max.x),
-            )
+            (col_idx_at(viewport.min.x), col_idx_at(viewport.max.x))
         };
-        let first_row = self.row_idx_at(viewport.min.y);
-        let last_row = self.row_idx_at(viewport.max.y);
+        let first_row = row_idx_at(viewport.min.y);
+        let last_row = row_idx_at(viewport.max.y);
 
         if do_prefetch {
             let row_range = first_row..last_row + 1;
@@ -399,17 +372,17 @@ impl<'a> TableSplitScrollDelegate<'a> {
             if self.table.num_rows <= row_nr {
                 break;
             }
+            let top_y = self.header_row_y.last() + row_nr as f32 * self.table.row_height;
+            let y_range = Rangef::new(top_y, top_y + self.table.row_height);
+
             for col_nr in first_col..=last_col {
                 let Some(column) = self.table.columns.get(col_nr) else {
                     continue;
                 };
 
                 let mut cell_rect =
-                    Rect::from_x_y_ranges(self.col_x[col_nr]..=self.col_x[col_nr + 1], {
-                        let y = self.header_row_y.last() + row_nr as f32 * self.table.row_height;
-                        y..=y + self.table.row_height
-                    })
-                    .translate(-offset);
+                    Rect::from_x_y_ranges(self.col_x[col_nr]..=self.col_x[col_nr + 1], y_range)
+                        .translate(-offset);
                 let clip_rect = cell_rect; // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
                 if column.auto_size_this_frame {
                     cell_rect.max.x = cell_rect.min.x + column.range.min;
