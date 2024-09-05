@@ -1,4 +1,7 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::{btree_map::Entry, BTreeMap},
+    ops::Range,
+};
 
 use egui::{vec2, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b};
 use vec1::Vec1;
@@ -49,10 +52,13 @@ impl TableState {
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct HeaderRow {
-    height: f32,
+    pub height: f32,
 
+    /// If empty, it is ignored.
     ///
-    groups: Vec<usize>,
+    /// Contains non-overlapping ranges of column indices to group together.
+    /// For instance: `vec![(0..3), (3..5), (5..6)]`.
+    pub groups: Vec<Range<usize>>,
 }
 
 impl HeaderRow {
@@ -126,6 +132,17 @@ pub struct CellInfo {
     // We could add more stuff here, like a reference to the column
 }
 
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct HeaderCellInfo {
+    pub group_index: usize,
+
+    pub col_range: Range<usize>,
+
+    /// Hader row
+    pub row_nr: usize,
+}
+
 pub trait TableDelegate {
     /// Called before any call to [`Self::cell_ui`] to prefetch the range of visible rows.
     fn prefetch_rows(&mut self, _row_numbers: std::ops::Range<u64>) {}
@@ -133,7 +150,7 @@ pub trait TableDelegate {
     /// The contents of a header cell in the table.
     ///
     /// The [`CellInfo::row_nr`] is which header row (usually 0).
-    fn header_cell_ui(&mut self, ui: &mut Ui, cell: &CellInfo);
+    fn header_cell_ui(&mut self, ui: &mut Ui, cell: &HeaderCellInfo);
 
     /// The contents of a cell in the table.
     ///
@@ -263,6 +280,19 @@ impl Table {
 #[derive(Clone, Copy, Debug)]
 struct ColumnResizer {
     offset: Vec2,
+
+    top: f32,
+}
+
+fn update(map: &mut BTreeMap<usize, ColumnResizer>, key: usize, value: ColumnResizer) {
+    match map.entry(key) {
+        Entry::Vacant(entry) => {
+            entry.insert(value);
+        }
+        Entry::Occupied(mut entry) => {
+            entry.get_mut().top = entry.get_mut().top.min(value.top);
+        }
+    }
 }
 
 struct TableSplitScrollDelegate<'a> {
@@ -291,21 +321,56 @@ struct TableSplitScrollDelegate<'a> {
 impl<'a> TableSplitScrollDelegate<'a> {
     fn header_ui(&mut self, ui: &mut Ui, offset: Vec2) {
         for (row_nr, header_row) in self.table.headers.iter().enumerate() {
+            let groups = if header_row.groups.is_empty() {
+                (0..self.table.columns.len()).map(|i| i..i + 1).collect()
+            } else {
+                header_row.groups.clone()
+            };
+
             let y_range = Rangef::new(self.header_row_y[row_nr], self.header_row_y[row_nr + 1]);
-            for (col_nr, column) in self.table.columns.iter().enumerate() {
-                let mut cell_rect =
-                    Rect::from_x_y_ranges(self.col_x[col_nr]..=self.col_x[col_nr + 1], y_range)
+
+            for (group_index, col_range) in groups.into_iter().enumerate() {
+                let start = col_range.start;
+                let end = col_range.end;
+
+                let mut header_rect =
+                    Rect::from_x_y_ranges(self.col_x[start]..=self.col_x[end], y_range)
                         .translate(-offset);
-                let clip_rect = cell_rect; // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
-                if column.auto_size_this_frame {
-                    cell_rect.max.x = cell_rect.min.x + column.range.min;
+
+                if 0 < start
+                    && self.table.columns[start - 1].resizable
+                    && ui.clip_rect().x_range().contains(header_rect.left())
+                {
+                    // The previous column is resizable, so make sure the resize line goes to above this heading:
+                    update(
+                        &mut self.visible_column_lines,
+                        start - 1,
+                        ColumnResizer {
+                            offset,
+                            top: header_rect.top(),
+                        },
+                    );
+                }
+
+                let clip_rect = header_rect;
+
+                let last_column = &self.table.columns[end - 1];
+                let auto_size_this_frame = last_column.auto_size_this_frame; // TODO: correct?
+
+                if auto_size_this_frame {
+                    // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
+                    header_rect.max.x = header_rect.min.x
+                        + self.table.columns[start..end]
+                            .iter()
+                            .map(|column| column.range.min)
+                            .sum::<f32>();
                 }
 
                 let mut ui_builder = UiBuilder::new()
-                    .max_rect(cell_rect)
-                    .id_salt((row_nr, col_nr))
+                    .max_rect(header_rect)
+                    .id_salt(("header", row_nr, group_index))
                     .layout(egui::Layout::left_to_right(egui::Align::Center));
-                if column.auto_size_this_frame {
+                if auto_size_this_frame {
                     ui_builder = ui_builder.sizing_pass();
                 }
                 let mut cell_ui = ui.new_child(ui_builder);
@@ -313,19 +378,31 @@ impl<'a> TableSplitScrollDelegate<'a> {
 
                 self.table_delegate.header_cell_ui(
                     &mut cell_ui,
-                    &CellInfo {
-                        col_nr,
-                        row_nr: row_nr as u64,
+                    &HeaderCellInfo {
+                        group_index,
+                        col_range,
+                        row_nr,
                     },
                 );
 
-                let width = &mut self.max_column_widths[col_nr];
-                *width = width.max(cell_ui.min_size().x);
+                if start + 1 == end {
+                    // normal single-column group
+                    let col_nr = start;
+                    let column = &self.table.columns[start];
+                    let width = &mut self.max_column_widths[col_nr];
+                    *width = width.max(cell_ui.min_size().x);
 
-                // Save column lines for later interaction:
-                if column.resizable {
-                    self.visible_column_lines
-                        .insert(col_nr, ColumnResizer { offset });
+                    // Save column lines for later interaction:
+                    if column.resizable && ui.clip_rect().x_range().contains(header_rect.right()) {
+                        update(
+                            &mut self.visible_column_lines,
+                            col_nr,
+                            ColumnResizer {
+                                offset,
+                                top: header_rect.top(),
+                            },
+                        );
+                    }
                 }
             }
         }
@@ -383,8 +460,9 @@ impl<'a> TableSplitScrollDelegate<'a> {
                 let mut cell_rect =
                     Rect::from_x_y_ranges(self.col_x[col_nr]..=self.col_x[col_nr + 1], y_range)
                         .translate(-offset);
-                let clip_rect = cell_rect; // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
+                let clip_rect = cell_rect;
                 if column.auto_size_this_frame {
+                    // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
                     cell_rect.max.x = cell_rect.min.x + column.range.min;
                 }
 
@@ -412,8 +490,14 @@ impl<'a> TableSplitScrollDelegate<'a> {
                 continue;
             };
             if column.resizable {
-                self.visible_column_lines
-                    .insert(col_nr, ColumnResizer { offset });
+                update(
+                    &mut self.visible_column_lines,
+                    col_nr,
+                    ColumnResizer {
+                        offset,
+                        top: *self.header_row_y.last(),
+                    },
+                );
             }
         }
     }
@@ -443,7 +527,7 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
     fn finish(&mut self, ui: &mut Ui) {
         // Paint column resize lines
 
-        for (col_nr, ColumnResizer { offset }) in &self.visible_column_lines {
+        for (col_nr, ColumnResizer { offset, top }) in &self.visible_column_lines {
             let col_nr = *col_nr;
             let Some(column) = self.table.columns.get(col_nr) else {
                 continue;
@@ -472,7 +556,7 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
             let column_resize_id = self.id.with(column.id(col_nr)).with("resize");
 
             let mut x = self.col_x[col_nr + 1] - offset.x; // Right side of the column
-            let yrange = ui.clip_rect().y_range();
+            let yrange = Rangef::new(*top, ui.clip_rect().bottom());
             let line_rect = egui::Rect::from_x_y_ranges(x..=x, yrange)
                 .expand(ui.style().interaction.resize_grab_radius_side);
 

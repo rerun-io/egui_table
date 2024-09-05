@@ -42,30 +42,43 @@ impl egui_table::TableDelegate for TableDemo {
         self.prefetched_row_ranges.push(row_numbers);
     }
 
-    fn header_cell_ui(&mut self, ui: &mut egui::Ui, cell: &egui_table::CellInfo) {
-        let egui_table::CellInfo { col_nr, .. } = *cell;
+    fn header_cell_ui(&mut self, ui: &mut egui::Ui, cell_inf: &egui_table::HeaderCellInfo) {
+        let egui_table::HeaderCellInfo {
+            group_index,
+            col_range,
+            row_nr,
+            ..
+        } = cell_inf;
 
         egui::Frame::none()
             .inner_margin(Margin::symmetric(4.0, 0.0))
             .show(ui, |ui| {
-                if col_nr == 0 {
-                    egui::Sides::new().height(ui.available_height()).show(
-                        ui,
-                        |ui| {
-                            ui.heading("Row");
-                        },
-                        |ui| {
-                            ui.label("⬇");
-                        },
-                    );
+                #[allow(clippy::collapsible_else_if)]
+                if *row_nr == 0 {
+                    if 0 < col_range.start {
+                        // Our special grouped column.
+                        ui.heading(format!("This is group {group_index}"));
+                    }
                 } else {
-                    ui.heading(format!("Column {col_nr}"));
+                    if col_range.start == 0 {
+                        egui::Sides::new().height(ui.available_height()).show(
+                            ui,
+                            |ui| {
+                                ui.heading("Row");
+                            },
+                            |ui| {
+                                ui.label("⬇");
+                            },
+                        );
+                    } else {
+                        ui.heading(format!("Column {group_index}"));
+                    }
                 }
             });
     }
 
-    fn cell_ui(&mut self, ui: &mut egui::Ui, cell: &egui_table::CellInfo) {
-        let egui_table::CellInfo { row_nr, col_nr, .. } = *cell;
+    fn cell_ui(&mut self, ui: &mut egui::Ui, cell_info: &egui_table::CellInfo) {
+        let egui_table::CellInfo { row_nr, col_nr, .. } = *cell_info;
 
         if row_nr % 2 == 1 {
             ui.painter()
@@ -200,7 +213,10 @@ impl TableDemo {
             id_salt,
             num_sticky_cols: self.num_sticky_cols,
             headers: vec![
-                egui_table::HeaderRow::new(self.top_row_height),
+                egui_table::HeaderRow {
+                    height: self.top_row_height,
+                    groups: vec![0..1, 1..4, 4..8, 8..12],
+                },
                 egui_table::HeaderRow::new(self.top_row_height),
             ],
             row_height: self.row_height,
