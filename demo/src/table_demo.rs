@@ -12,7 +12,6 @@ pub struct TableDemo {
     auto_size_mode: AutoSizeMode,
     top_row_height: f32,
     row_height: f32,
-    reversed: bool,
     prefetched_row_ranges: Vec<Range<u64>>,
 }
 
@@ -26,7 +25,6 @@ impl Default for TableDemo {
             auto_size_mode: AutoSizeMode::default(),
             top_row_height: 24.0,
             row_height: 20.0,
-            reversed: false,
             prefetched_row_ranges: vec![],
         }
     }
@@ -75,8 +73,7 @@ impl TableDelegate for TableDemo {
                                 ui.heading("Row");
                             },
                             |ui| {
-                                self.reversed ^=
-                                    ui.button(if self.reversed { "⬆" } else { "⬇" }).clicked();
+                                ui.label("⬇");
                             },
                         );
                     } else {
