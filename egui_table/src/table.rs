@@ -420,18 +420,25 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
 
             if resize_response.dragged() {
                 if let Some(pointer) = ui.ctx().pointer_latest_pos() {
-                    let mut new_width = *column_width + pointer.x - x;
+                    let desired_new_width = *column_width + pointer.x - x;
+                    let desired_new_width = column.range.clamp(desired_new_width);
 
                     // We don't want to shrink below the size that was actually used.
                     // However, we still want to allow content that shrinks when you try
                     // to make the column less wide, so we allow some small shrinkage each frame:
                     // big enough to allow shrinking over time, small enough not to look ugly when
                     // shrinking fails. This is a bit of a HACK around immediate mode.
+                    // TODO: do something smarter by remembering success/failure to resize from one frame to the next.
                     let max_shrinkage_per_frame = 8.0;
-                    new_width = new_width.at_least(used_width - max_shrinkage_per_frame);
-                    new_width = column.range.clamp(new_width);
+                    let new_width =
+                        desired_new_width.at_least(used_width - max_shrinkage_per_frame);
+                    let new_width = column.range.clamp(new_width);
                     x += new_width - *column_width;
                     *column_width = new_width;
+
+                    if new_width != desired_new_width {
+                        ui.ctx().request_repaint(); // Get there faster
+                    }
                 }
             }
 
