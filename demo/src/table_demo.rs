@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use egui::Margin;
+use egui::{Align2, Margin, NumExt};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct TableDemo {
@@ -57,7 +57,26 @@ impl egui_table::TableDelegate for TableDemo {
                 if *row_nr == 0 {
                     if 0 < col_range.start {
                         // Our special grouped column.
-                        ui.heading(format!("This is group {group_index}"));
+                        let sticky = true;
+                        let text = format!("This is group {group_index}");
+                        if sticky {
+                            // Put the text leftmost in the clip rect (so it is always visible)
+                            let font_id = egui::TextStyle::Heading.resolve(ui.style());
+                            let text_color = ui.visuals().text_color();
+                            let galley =
+                                ui.painter()
+                                    .layout(text, font_id, text_color, f32::INFINITY);
+                            let mut pos = Align2::LEFT_CENTER
+                                .anchor_size(ui.clip_rect().left_center(), galley.size())
+                                .min;
+
+                            // … but not so far to the right that it doesn't fit.
+                            pos.x = pos.x.at_most(ui.max_rect().right() - galley.size().x);
+
+                            ui.painter().galley(pos, galley, text_color);
+                        } else {
+                            ui.heading(text);
+                        }
                     }
                 } else {
                     if col_range.start == 0 {
