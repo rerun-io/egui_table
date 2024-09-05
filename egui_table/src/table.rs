@@ -62,7 +62,7 @@ impl TableState {
 ///
 /// ## Batteries not included
 /// * You need to specify its size beforehand
-/// * Does not add any margins to cells. Add it yourself.
+/// * Does not add any margins to cells. Add it yourself with [`egui::Frame`].
 /// * Does not clip cells, or wrap them in scroll areas. Do that yourself.
 /// * Doesn't paint any guide-lines for the rows. Paint them yourself.
 /// * There is not special header rows. Use sticky rows for that.

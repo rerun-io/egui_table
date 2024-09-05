@@ -13,10 +13,6 @@ version = "0.28.1"
 [profile.release]
 opt-level = 2 # fast and small wasm
 
-[profile.dev.package."*"]
-# Optimize all dependencies even in debug builds (does not affect workspace packages):
-opt-level = 2
-
 
 [workspace.dependencies]
 egui_table = { version = "0.28.1", path = "egui_table", default-features = false }
