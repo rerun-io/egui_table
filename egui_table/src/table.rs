@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{cell, collections::BTreeMap};
 
 use egui::{vec2, Id, IdMap, NumExt as _, Rect, Ui, UiBuilder, Vec2, Vec2b};
 use vec1::Vec1;
@@ -319,6 +319,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
                 };
 
                 let mut cell_rect = self.cell_rect(col_nr, row_nr).translate(-offset);
+                let clip_rect = cell_rect; // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
                 if column.auto_size_this_frame {
                     cell_rect.max.x = cell_rect.min.x + column.range.min;
                 }
@@ -331,7 +332,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
                     ui_builder = ui_builder.sizing_pass();
                 }
                 let mut cell_ui = ui.new_child(ui_builder);
-                cell_ui.shrink_clip_rect(cell_rect);
+                cell_ui.shrink_clip_rect(clip_rect);
 
                 self.table_delegate
                     .cell_ui(&mut cell_ui, &CellInfo { col_nr, row_nr });
