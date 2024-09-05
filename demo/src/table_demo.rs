@@ -18,8 +18,8 @@ pub struct TableDemo {
 impl Default for TableDemo {
     fn default() -> Self {
         Self {
-            num_columns: 10,
-            num_rows: 100,
+            num_columns: 20,
+            num_rows: 10_000,
             num_sticky_cols: 1,
             default_column: Column::new(100.0, 10.0..=500.0),
             auto_size_mode: AutoSizeMode::default(),
@@ -85,7 +85,7 @@ impl TableDelegate for TableDemo {
                     } else {
                         ui.label(format!("({row_nr}, {col_nr})"));
 
-                        if (row_nr + col_nr as u64) % 9 == col_nr as u64 % 7 {
+                        if (row_nr + col_nr as u64) % 27 == 0 {
                             if !ui.is_sizing_pass() {
                                 // During a sizing pass we don't truncate!
                                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
