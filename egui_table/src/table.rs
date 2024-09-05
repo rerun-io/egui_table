@@ -1,4 +1,4 @@
-use std::{cell, collections::BTreeMap};
+use std::collections::BTreeMap;
 
 use egui::{vec2, Id, IdMap, NumExt as _, Rect, Ui, UiBuilder, Vec2, Vec2b};
 use vec1::Vec1;
@@ -128,7 +128,10 @@ impl Table {
         let num_scroll_rows = self.num_rows - self.sticky_row_heights.len() as u64;
 
         let id = TableState::id(ui, self.id_salt);
-        let mut state: TableState = TableState::load(ui.ctx(), id).unwrap_or_default();
+        let state = TableState::load(ui.ctx(), id);
+        let is_new = state.is_none();
+        let do_full_sizing_pass = is_new;
+        let mut state = state.unwrap_or_default();
 
         for (i, column) in self.columns.iter_mut().enumerate() {
             let column_id = column.id(i);
@@ -136,6 +139,10 @@ impl Table {
                 column.current = *existing_width;
             }
             column.current = column.range.clamp(column.current);
+
+            if do_full_sizing_pass {
+                column.auto_size_this_frame = true;
+            }
         }
 
         let parent_width = ui.available_width();
@@ -177,7 +184,11 @@ impl Table {
             self.sticky_row_heights.iter().sum(),
         );
 
-        ui.scope(|ui| {
+        let mut ui_builder = UiBuilder::new();
+        if do_full_sizing_pass {
+            ui_builder = ui_builder.sizing_pass().invisible();
+        }
+        ui.scope_builder(ui_builder, |ui| {
             // Don't wrap text in the table cells.
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend); // TODO: I think this is default for horizontal layouts anyway?
 
