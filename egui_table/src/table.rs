@@ -55,7 +55,7 @@ impl TableState {
 /// You can designate a certain number of column and rows as being "sticky".
 /// These won't scroll with the rest of the table.
 ///
-/// The sticky rows are always the first ones at the top, and are ususally used for the column headers.
+/// The sticky rows are always the first ones at the top, and are usually used for the column headers.
 /// The sticky columns are always the first ones on the left, useful for special columns like
 /// table row number or similar.
 /// A sticky column is sometimes called a "gutter".
