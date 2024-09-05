@@ -47,6 +47,25 @@ impl TableState {
     }
 }
 
+/// A table viewer.
+///
+/// Designed to be fast when there are millions of rows, but only hundreds of columns.
+///
+/// ## Sticky columns and rows
+/// You can designate a certain number of column and rows as being "sticky".
+/// These won't scroll with the rest of the table.
+///
+/// The sticky rows are always the first ones at the top, and are ususally used for the column headers.
+/// The sticky columns are always the first ones on the left, useful for special columns like
+/// table row number or similar.
+/// A sticky column is sometimes called a "gutter".
+///
+/// ## Batteries not included
+/// * You need to specify its size beforehand
+/// * Does not add any margins to cells. Add it yourself.
+/// * Does not clip cells, or wrap them in scroll areas. Do that yourself.
+/// * Doesn't paint any guide-lines for the rows. Paint them yourself.
+/// * There is not special header rows. Use sticky rows for that.
 pub struct Table {
     pub columns: Vec<Column>,
 

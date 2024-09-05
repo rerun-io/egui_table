@@ -84,6 +84,8 @@ impl SplitScroll {
 
                 let mut scroll_ui = ui.new_child(UiBuilder::new().max_rect(rect));
                 egui::ScrollArea::new(scroll_enabled)
+                    .auto_shrink(false)
+                    .scroll_bar_rect(bottom_right_rect)
                     .show_viewport(&mut scroll_ui, |ui, scroll_offset| {
                         ui.set_min_size(fixed_size + scroll_content_size);
 
