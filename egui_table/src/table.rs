@@ -47,6 +47,17 @@ impl TableState {
     }
 }
 
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct Header {
+    height: f32,
+}
+
+impl Header {
+    pub fn new(height: f32) -> Self {
+        Self { height }
+    }
+}
+
 /// A table viewer.
 ///
 /// Designed to be fast when there are millions of rows, but only hundreds of columns.
@@ -61,11 +72,11 @@ impl TableState {
 /// A sticky column is sometimes called a "gutter".
 ///
 /// ## Batteries not included
-/// * You need to specify its size beforehand
+/// * You need to specify the `Table` size beforehand
 /// * Does not add any margins to cells. Add it yourself with [`egui::Frame`].
-/// * Does not clip cells, or wrap them in scroll areas. Do that yourself.
+/// * Does not wrap cells in scroll areas. Do that yourself.
 /// * Doesn't paint any guide-lines for the rows. Paint them yourself.
-/// * There is not special header rows. Use sticky rows for that.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Table {
     pub columns: Vec<Column>,
 
@@ -74,9 +85,8 @@ pub struct Table {
     /// Which columns are sticky (non-scrolling)?
     pub num_sticky_cols: usize,
 
-    /// The count and heights of the sticky (non-scrolling) rows.
-    /// Usually used for a single header row.
-    pub sticky_row_heights: Vec<f32>,
+    /// The count and parameters of the sticky (non-scrolling) header rows.
+    pub headers: Vec<Header>,
 
     /// Height of the non-sticky rows.
     pub row_height: f32,
@@ -93,7 +103,7 @@ impl Default for Table {
             columns: vec![],
             id_salt: Id::new("table"),
             num_sticky_cols: 1,
-            sticky_row_heights: vec![16.0],
+            headers: vec![Header::new(16.0)],
             row_height: 16.0,
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
@@ -112,20 +122,24 @@ pub struct CellInfo {
 
 pub trait TableDelegate {
     /// Called before any call to [`Self::cell_ui`] to prefetch the range of visible rows.
-    ///
-    /// A first call will contain the sticky rows,
-    /// and a second call will contain the scrollable rows.
     fn prefetch_rows(&mut self, _row_numbers: std::ops::Range<u64>) {}
 
+    /// The contents of a header cell in the table.
+    ///
+    /// The [`CellInfo::row_nr`] is which header row (usually 0).
+    fn header_cell_ui(&mut self, ui: &mut Ui, cell: &CellInfo);
+
     /// The contents of a cell in the table.
+    ///
+    /// The [`CellInfo::row_nr`] is ignoring header rows.
     fn cell_ui(&mut self, ui: &mut Ui, cell: &CellInfo);
 }
 
 impl Table {
     pub fn show(mut self, ui: &mut Ui, table_delegate: &mut dyn TableDelegate) {
         self.num_sticky_cols = self.num_sticky_cols.at_most(self.columns.len());
-        self.num_rows = self.num_rows.at_least(self.sticky_row_heights.len() as u64);
-        let num_scroll_rows = self.num_rows - self.sticky_row_heights.len() as u64;
+        self.num_rows = self.num_rows.at_least(self.headers.len() as u64);
+        let num_scroll_rows = self.num_rows - self.headers.len() as u64;
 
         let id = TableState::id(ui, self.id_salt);
         let state = TableState::load(ui.ctx(), id);
@@ -166,11 +180,11 @@ impl Table {
             col_x
         };
 
-        let sticky_row_y = {
+        let header_row_y = {
             let mut y = ui.cursor().min.y;
-            let mut sticky_row_y = Vec1::with_capacity(y, self.sticky_row_heights.len() + 1);
-            for height in &self.sticky_row_heights {
-                y += *height;
+            let mut sticky_row_y = Vec1::with_capacity(y, self.headers.len() + 1);
+            for header in &self.headers {
+                y += header.height;
                 sticky_row_y.push(y);
             }
             sticky_row_y
@@ -181,7 +195,7 @@ impl Table {
                 .iter()
                 .map(|c| c.current)
                 .sum(),
-            self.sticky_row_heights.iter().sum(),
+            self.headers.iter().map(|h| h.height).sum(),
         );
 
         let mut ui_builder = UiBuilder::new();
@@ -194,7 +208,7 @@ impl Table {
 
             let num_columns = self.columns.len();
 
-            table_delegate.prefetch_rows(0..self.sticky_row_heights.len() as u64);
+            table_delegate.prefetch_rows(0..self.headers.len() as u64);
 
             SplitScroll {
                 scroll_enabled: Vec2b::new(true, true),
@@ -215,7 +229,7 @@ impl Table {
                     state: &mut state,
                     table: &mut self,
                     col_x,
-                    sticky_row_y,
+                    header_row_y,
                     max_column_widths: vec![0.0; num_columns],
                     visible_column_lines: Default::default(),
                     do_full_sizing_pass,
@@ -241,8 +255,8 @@ struct TableSplitScrollDelegate<'a> {
     /// The x coordinate for the start of each column, plus the end of the last column.
     col_x: Vec1<f32>,
 
-    /// The y coordinate for the start of each sticky row, plus the end of the last sticky row.
-    sticky_row_y: Vec1<f32>,
+    /// The y coordinate for the start of each header row, plus the end of the last header row.
+    header_row_y: Vec1<f32>,
 
     /// Actual width of the widest element in each column
     max_column_widths: Vec<f32>,
@@ -262,29 +276,98 @@ impl<'a> TableSplitScrollDelegate<'a> {
             .saturating_sub(1)
     }
 
-    fn row_idx_at(&self, y: f32) -> u64 {
-        if y <= *self.sticky_row_y.last() {
-            self.sticky_row_y
-                .partition_point(|&row_y| row_y < y)
-                .saturating_sub(1) as u64
-        } else {
-            let y = y - self.sticky_row_y.last();
-            let row_nr = (y / self.table.row_height).floor() as u64;
-            (self.table.sticky_row_heights.len() as u64 + row_nr)
-                .at_most(self.table.num_rows.saturating_sub(1))
-        }
+    fn header_row_idx_at(&self, y: f32) -> u64 {
+        self.header_row_y
+            .partition_point(|&row_y| row_y < y)
+            .saturating_sub(1) as u64
     }
 
-    fn cell_rect(&self, col: usize, row: u64) -> Rect {
-        let x_range = self.col_x[col]..=self.col_x[col + 1];
-        let y_range = if row < self.table.sticky_row_heights.len() as u64 {
-            self.sticky_row_y[row as usize]..=self.sticky_row_y[row as usize + 1]
+    fn row_idx_at(&self, y: f32) -> u64 {
+        let y = y - self.header_row_y.last();
+        let row_nr = (y / self.table.row_height).floor() as u64;
+        row_nr.at_most(self.table.num_rows.saturating_sub(1))
+    }
+
+    fn header_ui(&mut self, ui: &mut Ui, offset: Vec2) {
+        // Find the visible range of columns and rows:
+        let viewport = ui.clip_rect().translate(offset);
+
+        let (first_col, last_col) = if self.do_full_sizing_pass {
+            // We do the UI for all columns during a sizing pass, so we can auto-size ALL columns
+            (0, self.col_x.len() - 1)
         } else {
-            let row = row - self.table.sticky_row_heights.len() as u64;
-            let y = self.sticky_row_y.last() + row as f32 * self.table.row_height;
-            y..=y + self.table.row_height
+            // Only paint the visible columns, as an optimization
+            (
+                self.col_idx_at(viewport.min.x),
+                self.col_idx_at(viewport.max.x),
+            )
         };
-        Rect::from_x_y_ranges(x_range, y_range)
+        let first_row = self.header_row_idx_at(viewport.min.y);
+        let last_row = self.header_row_idx_at(viewport.max.y);
+
+        for col_nr in first_col..=last_col {
+            let Some(column) = self.table.columns.get_mut(col_nr) else {
+                continue;
+            };
+            if !column.resizable {
+                continue;
+            }
+            let column_id = column.id(col_nr);
+            let column_resize_id = column_id.with("resize");
+            if let Some(response) = ui.ctx().read_response(column_resize_id) {
+                if response.double_clicked() {
+                    column.auto_size_this_frame = true;
+                }
+            }
+        }
+
+        for row_nr in first_row..=last_row {
+            if self.table.num_rows <= row_nr {
+                break;
+            }
+            for col_nr in first_col..=last_col {
+                let Some(column) = self.table.columns.get(col_nr) else {
+                    continue;
+                };
+
+                let mut cell_rect = Rect::from_x_y_ranges(
+                    self.col_x[col_nr]..=self.col_x[col_nr + 1],
+                    self.header_row_y[row_nr as usize]..=self.header_row_y[row_nr as usize + 1],
+                )
+                .translate(-offset);
+                let clip_rect = cell_rect; // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
+                if column.auto_size_this_frame {
+                    cell_rect.max.x = cell_rect.min.x + column.range.min;
+                }
+
+                let mut ui_builder = UiBuilder::new()
+                    .max_rect(cell_rect)
+                    .id_salt((row_nr, col_nr))
+                    .layout(egui::Layout::left_to_right(egui::Align::Center));
+                if column.auto_size_this_frame {
+                    ui_builder = ui_builder.sizing_pass();
+                }
+                let mut cell_ui = ui.new_child(ui_builder);
+                cell_ui.shrink_clip_rect(clip_rect);
+
+                self.table_delegate
+                    .header_cell_ui(&mut cell_ui, &CellInfo { col_nr, row_nr });
+
+                let width = &mut self.max_column_widths[col_nr];
+                *width = width.max(cell_ui.min_size().x);
+            }
+        }
+
+        // Save column lines for later interaction:
+        for col_nr in first_col..=last_col {
+            let Some(column) = self.table.columns.get(col_nr) else {
+                continue;
+            };
+            if column.resizable {
+                self.visible_column_lines
+                    .insert(col_nr, ColumnResizer { offset });
+            }
+        }
     }
 
     fn region_ui(&mut self, ui: &mut Ui, offset: Vec2, do_prefetch: bool) {
@@ -311,7 +394,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
         } else {
             debug_assert!(
                 self.has_prefetched,
-                "SplitScroll delegate methods called in unexpected ortder"
+                "SplitScroll delegate methods called in unexpected order"
             );
         }
 
@@ -340,7 +423,12 @@ impl<'a> TableSplitScrollDelegate<'a> {
                     continue;
                 };
 
-                let mut cell_rect = self.cell_rect(col_nr, row_nr).translate(-offset);
+                let mut cell_rect =
+                    Rect::from_x_y_ranges(self.col_x[col_nr]..=self.col_x[col_nr + 1], {
+                        let y = self.header_row_y.last() + row_nr as f32 * self.table.row_height;
+                        y..=y + self.table.row_height
+                    })
+                    .translate(-offset);
                 let clip_rect = cell_rect; // Note: we shrink the cell rect when auto-sizing, but not the clip rect! This is to avoid flicker.
                 if column.auto_size_this_frame {
                     cell_rect.max.x = cell_rect.min.x + column.range.min;
@@ -364,7 +452,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
             }
         }
 
-        // Resize interaction:
+        // Save column lines for later interaction:
         for col_nr in first_col..=last_col {
             let Some(column) = self.table.columns.get(col_nr) else {
                 continue;
@@ -379,15 +467,11 @@ impl<'a> TableSplitScrollDelegate<'a> {
 
 impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
     fn left_top_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, Vec2::ZERO, false);
+        self.header_ui(ui, Vec2::ZERO);
     }
 
     fn right_top_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(
-            ui,
-            vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0),
-            false,
-        );
+        self.header_ui(ui, vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0));
     }
 
     fn left_bottom_ui(&mut self, ui: &mut Ui) {
