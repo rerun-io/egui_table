@@ -84,6 +84,14 @@ impl TableDelegate for TableDemo {
                         ui.label(row_nr.to_string());
                     } else {
                         ui.label(format!("({row_nr}, {col_nr})"));
+
+                        if (row_nr + col_nr as u64) % 9 == col_nr as u64 % 7 {
+                            if !ui.is_sizing_pass() {
+                                // During a sizing pass we don't truncate!
+                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                            }
+                            ui.label("Extra long cell!");
+                        }
                     }
                 }
             });
