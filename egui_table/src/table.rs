@@ -210,6 +210,17 @@ impl Table {
 
             table_delegate.prefetch_rows(0..self.headers.len() as u64);
 
+            for (col_nr, column) in self.columns.iter_mut().enumerate() {
+                if column.resizable {
+                    let column_resize_id = id.with(column.id(col_nr)).with("resize");
+                    if let Some(response) = ui.ctx().read_response(column_resize_id) {
+                        if response.double_clicked() {
+                            column.auto_size_this_frame = true;
+                        }
+                    }
+                }
+            }
+
             SplitScroll {
                 scroll_enabled: Vec2b::new(true, true),
                 fixed_size: sticky_size,
@@ -225,6 +236,7 @@ impl Table {
             .show(
                 ui,
                 &mut TableSplitScrollDelegate {
+                    id,
                     table_delegate,
                     state: &mut state,
                     table: &mut self,
@@ -248,6 +260,7 @@ struct ColumnResizer {
 }
 
 struct TableSplitScrollDelegate<'a> {
+    id: Id,
     table_delegate: &'a mut dyn TableDelegate,
     table: &'a mut Table,
     state: &'a mut TableState,
@@ -304,22 +317,6 @@ impl<'a> TableSplitScrollDelegate<'a> {
         };
         let first_row = self.header_row_idx_at(viewport.min.y);
         let last_row = self.header_row_idx_at(viewport.max.y);
-
-        for col_nr in first_col..=last_col {
-            let Some(column) = self.table.columns.get_mut(col_nr) else {
-                continue;
-            };
-            if !column.resizable {
-                continue;
-            }
-            let column_id = column.id(col_nr);
-            let column_resize_id = column_id.with("resize");
-            if let Some(response) = ui.ctx().read_response(column_resize_id) {
-                if response.double_clicked() {
-                    column.auto_size_this_frame = true;
-                }
-            }
-        }
 
         for row_nr in first_row..=last_row {
             if self.table.num_rows <= row_nr {
@@ -396,22 +393,6 @@ impl<'a> TableSplitScrollDelegate<'a> {
                 self.has_prefetched,
                 "SplitScroll delegate methods called in unexpected order"
             );
-        }
-
-        for col_nr in first_col..=last_col {
-            let Some(column) = self.table.columns.get_mut(col_nr) else {
-                continue;
-            };
-            if !column.resizable {
-                continue;
-            }
-            let column_id = column.id(col_nr);
-            let column_resize_id = column_id.with("resize");
-            if let Some(response) = ui.ctx().read_response(column_resize_id) {
-                if response.double_clicked() {
-                    column.auto_size_this_frame = true;
-                }
-            }
         }
 
         for row_nr in first_row..=last_row {
@@ -515,7 +496,7 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
                 *column_width = column_width.max(used_width);
             }
 
-            let column_resize_id = column_id.with("resize");
+            let column_resize_id = self.id.with(column.id(col_nr)).with("resize");
 
             let mut x = self.col_x[col_nr + 1] - offset.x; // Right side of the column
             let yrange = ui.clip_rect().y_range();
