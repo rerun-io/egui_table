@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use egui::{Align2, Margin, NumExt};
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -9,6 +11,7 @@ pub struct TableDemo {
     auto_size_mode: egui_table::AutoSizeMode,
     top_row_height: f32,
     row_height: f32,
+    is_row_expanded: BTreeMap<u64, bool>,
     prefetched: Vec<egui_table::PrefetchInfo>,
 }
 
@@ -24,6 +27,7 @@ impl Default for TableDemo {
             auto_size_mode: egui_table::AutoSizeMode::default(),
             top_row_height: 24.0,
             row_height: 20.0,
+            is_row_expanded: Default::default(),
             prefetched: vec![],
         }
     }
@@ -124,6 +128,7 @@ impl egui_table::TableDelegate for TableDemo {
         egui::Frame::none()
             .inner_margin(Margin::symmetric(4.0, 0.0))
             .show(ui, |ui| {
+                // Check for bugs:
                 if !self.was_row_prefetched(row_nr) {
                     ui.painter()
                         .rect_filled(ui.max_rect(), 0.0, ui.visuals().error_fg_color);
@@ -135,6 +140,17 @@ impl egui_table::TableDelegate for TableDemo {
                 }
 
                 if col_nr == 0 {
+                    // Button to expand/collapse row:
+                    let  is_expanded = self.is_row_expanded.get(&row_nr).copied().unwrap_or_default();
+                    let (_, response) = ui.allocate_exact_size(egui::Vec2::splat(12.0), egui::Sense::click());
+                    let expandedness = ui.ctx().animate_bool(egui::Id::new(row_nr), is_expanded);
+                    egui::collapsing_header::paint_default_icon(ui, expandedness, &response);
+                    if response.clicked() {
+                        // Toggle.
+                        // Note: we use a map instead of a set so that we can animate opening and closing of each column.
+                        self.is_row_expanded.insert(row_nr, !is_expanded);
+                    }
+
                     ui.label(row_nr.to_string());
                 } else {
                     ui.label(format!("({row_nr}, {col_nr})"));
@@ -278,6 +294,11 @@ impl TableDemo {
 
         ui.separator();
 
+        // TODO: avoid this:
+        let egui_ctx = ui.ctx().clone();
+        let is_row_expanded = self.is_row_expanded.clone();
+        let row_height = self.row_height;
+
         let mut table = egui_table::Table::new()
             .id_salt(id_salt)
             .num_rows(self.num_rows)
@@ -290,7 +311,18 @@ impl TableDemo {
                 },
                 egui_table::HeaderRow::new(self.top_row_height),
             ])
-            .row_height(self.row_height)
+            .row_top_offset(move |row_nr| -> f32 {
+                let fully_expanded_row_height = 100.0;
+                is_row_expanded
+                    .range(0..row_nr)
+                    .map(|(expanded_row_nr, expanded)| {
+                        let how_expanded =
+                            egui_ctx.animate_bool(egui::Id::new(expanded_row_nr), *expanded);
+                        how_expanded * fully_expanded_row_height
+                    })
+                    .sum::<f32>()
+                    + row_nr as f32 * row_height
+            })
             .auto_size_mode(self.auto_size_mode);
 
         if let Some(scroll_to_column) = scroll_to_column {

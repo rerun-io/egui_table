@@ -88,7 +88,6 @@ impl HeaderRow {
 /// * Does not add any margins to cells. Add it yourself with [`egui::Frame`].
 /// * Does not wrap cells in scroll areas. Do that yourself.
 /// * Doesn't paint any guide-lines for the rows. Paint them yourself.
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Table {
     /// The columns of the table.
     columns: Vec<Column>,
@@ -106,7 +105,7 @@ pub struct Table {
     headers: Vec<HeaderRow>,
 
     /// Height of the non-sticky rows.
-    row_height: f32,
+    row_top_offset: Box<dyn Fn(u64) -> f32>,
 
     /// Total number of rows (sticky + non-sticky).
     num_rows: u64,
@@ -125,7 +124,7 @@ impl Default for Table {
             id_salt: Id::new("table"),
             num_sticky_cols: 0,
             headers: vec![HeaderRow::new(16.0)],
-            row_height: 16.0,
+            row_top_offset: Box::new(|row_nr| 16.0 * row_nr as f32),
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
             scroll_to_columns: None,
@@ -232,9 +231,34 @@ impl Table {
     }
 
     /// Height of the non-sticky rows.
+    ///
+    /// This is for tables with rows of uniform height.
+    /// If you want heterogenous rwo heights, use [`Self::row_top_offset`] instead.
     #[inline]
     pub fn row_height(mut self, row_height: f32) -> Self {
-        self.row_height = row_height;
+        self.row_top_offset = Box::new(move |row_nr| row_nr as f32 * row_height);
+        self
+    }
+
+    /// Sets up where the bottom of each row is.
+    ///
+    /// This is for when you have heterogenous row heights,
+    /// i.e. different rows has different heights.
+    ///
+    /// The function should return the y-offset of the top edge of a specific row.
+    /// For instance, it could return:
+    ///
+    /// * `f(0) => 0.0`
+    /// * `f(1) => 20.0`
+    /// * `f(2) => 30.0`
+    /// * `f(3) => 40.0`
+    ///
+    /// The bottom of the last row will be calculated as `f(num_rows)`.
+    ///
+    /// This function may be called hundreds of times, so make it fast!
+    #[inline]
+    pub fn row_top_offset(mut self, row_top_offset: impl Fn(u64) -> f32 + 'static) -> Self {
+        self.row_top_offset = Box::new(row_top_offset);
         self
     }
 
@@ -296,6 +320,21 @@ impl Table {
     ) -> Self {
         self.scroll_to_columns = Some((columns, align));
         self
+    }
+
+    /// The top y coordinate offset of a specific row nr.
+    ///
+    /// `get_row_top_offset(0)` should always return 0.0.
+    fn get_row_top_offset(&self, row_nr: u64) -> f32 {
+        (self.row_top_offset)(row_nr)
+    }
+
+    /// Which row contains the given y offset (from the top)?
+    fn get_row_nr_at_y_offset(&self, y_offset: f32) -> u64 {
+        partition_point(0..=self.num_rows, |row_nr| {
+            y_offset <= self.get_row_top_offset(row_nr)
+        })
+        .saturating_sub(1)
     }
 
     pub fn show(mut self, ui: &mut Ui, table_delegate: &mut dyn TableDelegate) {
@@ -388,7 +427,7 @@ impl Table {
                         .iter()
                         .map(|c| c.current)
                         .sum(),
-                    self.num_rows as f32 * self.row_height,
+                    self.get_row_top_offset(self.num_rows),
                 ),
             }
             .show(
@@ -569,8 +608,9 @@ impl<'a> TableSplitScrollDelegate<'a> {
         } else {
             // Only paint the visible rows:
             let row_idx_at = |y: f32| -> u64 {
-                let y = y - self.header_row_y.last();
-                let row_nr = (y / self.table.row_height).floor() as u64;
+                let row_nr = self
+                    .table
+                    .get_row_nr_at_y_offset(y - self.header_row_y.last());
                 row_nr.at_most(self.table.num_rows.saturating_sub(1))
             };
 
@@ -598,8 +638,10 @@ impl<'a> TableSplitScrollDelegate<'a> {
         }
 
         for row_nr in row_range {
-            let top_y = self.header_row_y.last() + row_nr as f32 * self.table.row_height;
-            let y_range = Rangef::new(top_y, top_y + self.table.row_height);
+            let y_range = Rangef::new(
+                self.header_row_y.last() + self.table.get_row_top_offset(row_nr),
+                self.header_row_y.last() + self.table.get_row_top_offset(row_nr + 1),
+            );
 
             for col_nr in col_range.clone() {
                 let column = &self.table.columns[col_nr];
@@ -674,7 +716,7 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
 
             if let Some((row_range, align)) = &self.table.scroll_to_rows {
                 let y_from_row_nr = |row_nr: u64| -> f32 {
-                    let mut y = row_nr as f32 * self.table.row_height;
+                    let mut y = self.table.get_row_top_offset(row_nr);
 
                     let sticky_height = self.header_row_y.last() - self.header_row_y.first();
                     if y < sticky_height {
@@ -794,5 +836,38 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
 
             ui.painter().vline(x, yrange, stroke);
         }
+    }
+}
+
+/// Returns the index of the first element that returns `true` using binary search.
+fn partition_point(range: RangeInclusive<u64>, second_partition: impl Fn(u64) -> bool) -> u64 {
+    let mut min = *range.start();
+    let mut max = *range.end();
+
+    debug_assert!(min < max, "Bad call to partition_point");
+
+    while min < max {
+        let mid = min + (max - min) / 2;
+
+        if second_partition(mid) {
+            max = mid;
+        } else {
+            min = mid + 1;
+        }
+    }
+
+    min
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::table::partition_point;
+
+    #[test]
+    fn test_partition_point() {
+        assert_eq!(partition_point(0..=17, |i| 8 <= i), 8);
+        assert_eq!(partition_point(0..=17, |i| 9 <= i), 9);
+        assert_eq!(partition_point(10..=17, |_| true), 10);
+        assert_eq!(partition_point(10..=17, |_| false), 17);
     }
 }
