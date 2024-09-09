@@ -1,6 +1,6 @@
 use std::{
     collections::{btree_map::Entry, BTreeMap},
-    ops::Range,
+    ops::{Range, RangeInclusive},
 };
 
 use egui::{vec2, Align, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b};
@@ -114,7 +114,7 @@ pub struct Table {
     /// How to do auto-sizing of columns, if at all.
     auto_size_mode: AutoSizeMode,
 
-    scroll_to_row: Option<(u64, Option<Align>)>,
+    scroll_to_rows: Option<(RangeInclusive<u64>, Option<Align>)>,
 }
 
 impl Default for Table {
@@ -127,7 +127,7 @@ impl Default for Table {
             row_height: 16.0,
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
-            scroll_to_row: None,
+            scroll_to_rows: None,
         }
     }
 }
@@ -258,8 +258,16 @@ impl Table {
     ///
     /// See also: [`Self::vertical_scroll_offset`].
     #[inline]
-    pub fn scroll_to_row(mut self, row: u64, align: Option<Align>) -> Self {
-        self.scroll_to_row = Some((row, align));
+    pub fn scroll_to_row(self, row: u64, align: Option<Align>) -> Self {
+        self.scroll_to_rows(row..=row, align)
+    }
+
+    /// Scroll to a range of rows.
+    ///
+    /// See [`Self::scroll_to_row`] for details.
+    #[inline]
+    pub fn scroll_to_rows(mut self, rows: RangeInclusive<u64>, align: Option<Align>) -> Self {
+        self.scroll_to_rows = Some((rows, align));
         self
     }
 
@@ -615,7 +623,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
 impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
     // First to be called
     fn right_bottom_ui(&mut self, ui: &mut Ui) {
-        if let Some((row_nr, align)) = self.table.scroll_to_row {
+        if let Some((row_range, align)) = &self.table.scroll_to_rows {
             let header_height = self.header_row_y.last() - self.header_row_y.first();
             let y_from_row_nr = |row_nr: u64| -> f32 {
                 let mut y = row_nr as f32 * self.table.row_height;
@@ -629,8 +637,8 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
             };
 
             let x_range = ui.min_rect().x_range();
-            let y_range = y_from_row_nr(row_nr)..=y_from_row_nr(row_nr + 1);
-            ui.scroll_to_rect(Rect::from_x_y_ranges(x_range, y_range), align);
+            let y_range = y_from_row_nr(*row_range.start())..=y_from_row_nr(row_range.end() + 1);
+            ui.scroll_to_rect(Rect::from_x_y_ranges(x_range, y_range), *align);
         }
 
         self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min, true);
