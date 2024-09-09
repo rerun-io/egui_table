@@ -246,9 +246,23 @@ impl TableDemo {
             self.prefetched.clear();
         });
 
+        let mut scroll_to_row = None;
+        ui.horizontal(|ui| {
+            ui.label("Scroll to…");
+            if ui.button("top").clicked() {
+                scroll_to_row = Some(0);
+            }
+            if ui.button("middle").clicked() {
+                scroll_to_row = Some(self.num_rows / 2);
+            }
+            if ui.button("end").clicked() {
+                scroll_to_row = Some(self.num_rows.saturating_sub(1));
+            }
+        });
+
         ui.separator();
 
-        egui_table::Table::new()
+        let mut table = egui_table::Table::new()
             .id_salt(id_salt)
             .num_rows(self.num_rows)
             .columns(vec![self.default_column; self.num_columns])
@@ -261,7 +275,12 @@ impl TableDemo {
                 egui_table::HeaderRow::new(self.top_row_height),
             ])
             .row_height(self.row_height)
-            .auto_size_mode(self.auto_size_mode)
-            .show(ui, self);
+            .auto_size_mode(self.auto_size_mode);
+
+        if let Some(scroll_to_row) = scroll_to_row {
+            table = table.scroll_to_row(scroll_to_row, None);
+        }
+
+        table.show(ui, self);
     }
 }

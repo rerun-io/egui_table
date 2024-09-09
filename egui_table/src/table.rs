@@ -3,7 +3,7 @@ use std::{
     ops::Range,
 };
 
-use egui::{vec2, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b};
+use egui::{vec2, Align, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b};
 use vec1::Vec1;
 
 use crate::{columns::Column, SplitScroll, SplitScrollDelegate};
@@ -113,6 +113,8 @@ pub struct Table {
 
     /// How to do auto-sizing of columns, if at all.
     auto_size_mode: AutoSizeMode,
+
+    scroll_to_row: Option<(u64, Option<Align>)>,
 }
 
 impl Default for Table {
@@ -120,11 +122,12 @@ impl Default for Table {
         Self {
             columns: vec![],
             id_salt: Id::new("table"),
-            num_sticky_cols: 1,
+            num_sticky_cols: 0,
             headers: vec![HeaderRow::new(16.0)],
             row_height: 16.0,
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
+            scroll_to_row: None,
         }
     }
 }
@@ -210,7 +213,9 @@ impl Table {
         self
     }
 
-    /// Which columns are sticky (non-scrolling)?
+    /// How many columns are sticky (non-scrolling)?
+    ///
+    /// Default is 0.
     #[inline]
     pub fn num_sticky_cols(mut self, num_sticky_cols: usize) -> Self {
         self.num_sticky_cols = num_sticky_cols;
@@ -243,6 +248,19 @@ impl Table {
     #[inline]
     pub fn get_id(&self, ui: &Ui) -> Id {
         TableState::id(ui, self.id_salt)
+    }
+
+    /// Set a row to scroll to.
+    ///
+    /// `align` specifies if the row should be positioned in the top, center, or bottom of the view
+    /// (using [`Align::TOP`], [`Align::Center`] or [`Align::BOTTOM`]).
+    /// If `align` is `None`, the table will scroll just enough to bring the cursor into view.
+    ///
+    /// See also: [`Self::vertical_scroll_offset`].
+    #[inline]
+    pub fn scroll_to_row(mut self, row: u64, align: Option<Align>) -> Self {
+        self.scroll_to_row = Some((row, align));
+        self
     }
 
     pub fn show(mut self, ui: &mut Ui, table_delegate: &mut dyn TableDelegate) {
@@ -595,6 +613,29 @@ impl<'a> TableSplitScrollDelegate<'a> {
 }
 
 impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
+    // First to be called
+    fn right_bottom_ui(&mut self, ui: &mut Ui) {
+        if let Some((row_nr, align)) = self.table.scroll_to_row {
+            let header_height = self.header_row_y.last() - self.header_row_y.first();
+            let y_from_row_nr = |row_nr: u64| -> f32 {
+                let mut y = row_nr as f32 * self.table.row_height;
+
+                if y < header_height {
+                    // We need to do some shenanigans here because how the split area works:
+                    y -= header_height;
+                }
+
+                ui.min_rect().top() + y
+            };
+
+            let x_range = ui.min_rect().x_range();
+            let y_range = y_from_row_nr(row_nr)..=y_from_row_nr(row_nr + 1);
+            ui.scroll_to_rect(Rect::from_x_y_ranges(x_range, y_range), align);
+        }
+
+        self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min, true);
+    }
+
     fn left_top_ui(&mut self, ui: &mut Ui) {
         self.header_ui(ui, Vec2::ZERO);
     }
@@ -609,10 +650,6 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
             vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y),
             false,
         );
-    }
-
-    fn right_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min, true);
     }
 
     fn finish(&mut self, ui: &mut Ui) {
