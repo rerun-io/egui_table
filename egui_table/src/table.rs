@@ -114,6 +114,7 @@ pub struct Table {
     /// How to do auto-sizing of columns, if at all.
     auto_size_mode: AutoSizeMode,
 
+    scroll_to_columns: Option<(RangeInclusive<usize>, Option<Align>)>,
     scroll_to_rows: Option<(RangeInclusive<u64>, Option<Align>)>,
 }
 
@@ -127,6 +128,7 @@ impl Default for Table {
             row_height: 16.0,
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
+            scroll_to_columns: None,
             scroll_to_rows: None,
         }
     }
@@ -256,7 +258,7 @@ impl Table {
     /// (using [`Align::TOP`], [`Align::Center`] or [`Align::BOTTOM`]).
     /// If `align` is `None`, the table will scroll just enough to bring the cursor into view.
     ///
-    /// See also: [`Self::vertical_scroll_offset`].
+    /// See also: [`Self::scroll_to_column`].
     #[inline]
     pub fn scroll_to_row(self, row: u64, align: Option<Align>) -> Self {
         self.scroll_to_rows(row..=row, align)
@@ -268,6 +270,31 @@ impl Table {
     #[inline]
     pub fn scroll_to_rows(mut self, rows: RangeInclusive<u64>, align: Option<Align>) -> Self {
         self.scroll_to_rows = Some((rows, align));
+        self
+    }
+
+    /// Set a column to scroll to.
+    ///
+    /// `align` specifies if the column should be positioned in the left, center, or right of the view
+    /// (using [`Align::LEFT`], [`Align::Center`] or [`Align::RIGHT`]).
+    /// If `align` is `None`, the table will scroll just enough to bring the cursor into view.
+    ///
+    /// See also: [`Self::scroll_to_row`].
+    #[inline]
+    pub fn scroll_to_column(self, column: usize, align: Option<Align>) -> Self {
+        self.scroll_to_columns(column..=column, align)
+    }
+
+    /// Scroll to a range of columns.
+    ///
+    /// See [`Self::scroll_to_column`] for details.
+    #[inline]
+    pub fn scroll_to_columns(
+        mut self,
+        columns: RangeInclusive<usize>,
+        align: Option<Align>,
+    ) -> Self {
+        self.scroll_to_columns = Some((columns, align));
         self
     }
 
@@ -623,22 +650,47 @@ impl<'a> TableSplitScrollDelegate<'a> {
 impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
     // First to be called
     fn right_bottom_ui(&mut self, ui: &mut Ui) {
-        if let Some((row_range, align)) = &self.table.scroll_to_rows {
-            let header_height = self.header_row_y.last() - self.header_row_y.first();
-            let y_from_row_nr = |row_nr: u64| -> f32 {
-                let mut y = row_nr as f32 * self.table.row_height;
+        if self.table.scroll_to_columns.is_some() || self.table.scroll_to_rows.is_some() {
+            let mut target_rect = ui.clip_rect(); // no scrolling
+            let mut target_align = None;
 
-                if y < header_height {
-                    // We need to do some shenanigans here because how the split area works:
-                    y -= header_height;
-                }
+            if let Some((column_range, align)) = &self.table.scroll_to_columns {
+                let x_from_column_nr = |col_nr: usize| -> f32 {
+                    let mut x = self.col_x[col_nr];
 
-                ui.min_rect().top() + y
-            };
+                    let sitcky_width = self.col_x[self.table.num_sticky_cols] - self.col_x.first();
+                    if x < sitcky_width {
+                        // We need to do some shenanigans here because how the `SplitScroll` works:
+                        x -= sitcky_width;
+                    }
 
-            let x_range = ui.min_rect().x_range();
-            let y_range = y_from_row_nr(*row_range.start())..=y_from_row_nr(row_range.end() + 1);
-            ui.scroll_to_rect(Rect::from_x_y_ranges(x_range, y_range), *align);
+                    ui.min_rect().left() + x
+                };
+
+                target_rect.min.x = x_from_column_nr(*column_range.start());
+                target_rect.max.x = x_from_column_nr(*column_range.end() + 1);
+                target_align = target_align.or(*align);
+            }
+
+            if let Some((row_range, align)) = &self.table.scroll_to_rows {
+                let y_from_row_nr = |row_nr: u64| -> f32 {
+                    let mut y = row_nr as f32 * self.table.row_height;
+
+                    let sticky_height = self.header_row_y.last() - self.header_row_y.first();
+                    if y < sticky_height {
+                        // We need to do some shenanigans here because how the `SplitScroll` works:
+                        y -= sticky_height;
+                    }
+
+                    ui.min_rect().top() + y
+                };
+
+                target_rect.min.y = y_from_row_nr(*row_range.start());
+                target_rect.max.y = y_from_row_nr(*row_range.end() + 1);
+                target_align = target_align.or(*align);
+            }
+
+            ui.scroll_to_rect(target_rect, target_align);
         }
 
         self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min, true);

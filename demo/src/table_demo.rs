@@ -246,16 +246,30 @@ impl TableDemo {
             self.prefetched.clear();
         });
 
+        let mut scroll_to_column = None;
+        ui.horizontal(|ui| {
+            ui.label("Scroll horizontally to…");
+            if ui.button("left").clicked() {
+                scroll_to_column = Some(0);
+            }
+            if ui.button("middle").clicked() {
+                scroll_to_column = Some(self.num_columns / 2);
+            }
+            if ui.button("right").clicked() {
+                scroll_to_column = Some(self.num_columns.saturating_sub(1));
+            }
+        });
+
         let mut scroll_to_row = None;
         ui.horizontal(|ui| {
-            ui.label("Scroll to…");
+            ui.label("Scroll vertically to…");
             if ui.button("top").clicked() {
                 scroll_to_row = Some(0);
             }
             if ui.button("middle").clicked() {
                 scroll_to_row = Some(self.num_rows / 2);
             }
-            if ui.button("end").clicked() {
+            if ui.button("bottom").clicked() {
                 scroll_to_row = Some(self.num_rows.saturating_sub(1));
             }
         });
@@ -277,6 +291,9 @@ impl TableDemo {
             .row_height(self.row_height)
             .auto_size_mode(self.auto_size_mode);
 
+        if let Some(scroll_to_column) = scroll_to_column {
+            table = table.scroll_to_column(scroll_to_column, None);
+        }
         if let Some(scroll_to_row) = scroll_to_row {
             table = table.scroll_to_row(scroll_to_row, None);
         }
