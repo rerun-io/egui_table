@@ -91,14 +91,12 @@ impl TableDemo {
 
 impl egui_table::TableDelegate for TableDemo {
     fn prepare(&mut self, info: &egui_table::PrefetchInfo) {
-        for row in info.visible_rows.clone() {
-            assert!(
-                row < self.num_rows,
-                "Was asked to prefetch rows {:?}, but we only have {} rows. This is a bug in egui_table.",
-                info.visible_rows,
-                self.num_rows
-            );
-        }
+        assert!(
+            info.visible_rows.end <= self.num_rows,
+            "Was asked to prefetch rows {:?}, but we only have {} rows. This is a bug in egui_table.",
+            info.visible_rows,
+            self.num_rows
+        );
         self.prefetched.push(info.clone());
     }
 

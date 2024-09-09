@@ -88,7 +88,7 @@ impl HeaderRow {
 /// * Does not add any margins to cells. Add it yourself with [`egui::Frame`].
 /// * Does not wrap cells in scroll areas. Do that yourself.
 /// * Doesn't paint any guide-lines for the rows. Paint them yourself.
-pub struct Table {
+pub struct Table<'a> {
     /// The columns of the table.
     columns: Vec<Column>,
 
@@ -105,7 +105,7 @@ pub struct Table {
     headers: Vec<HeaderRow>,
 
     /// Height of the non-sticky rows.
-    row_top_offset: Box<dyn Fn(u64) -> f32>,
+    row_top_offset: Box<dyn Fn(u64) -> f32 + 'a>,
 
     /// Total number of rows (sticky + non-sticky).
     num_rows: u64,
@@ -117,7 +117,7 @@ pub struct Table {
     scroll_to_rows: Option<(RangeInclusive<u64>, Option<Align>)>,
 }
 
-impl Default for Table {
+impl<'a> Default for Table<'a> {
     fn default() -> Self {
         Self {
             columns: vec![],
@@ -183,7 +183,7 @@ pub trait TableDelegate {
     fn cell_ui(&mut self, ui: &mut Ui, cell: &CellInfo);
 }
 
-impl Table {
+impl<'a> Table<'a> {
     /// Create a new table, with no columns and no headers, and zero rows.
     #[inline]
     pub fn new() -> Self {
@@ -257,7 +257,7 @@ impl Table {
     ///
     /// This function may be called hundreds of times, so make it fast!
     #[inline]
-    pub fn row_top_offset(mut self, row_top_offset: impl Fn(u64) -> f32 + 'static) -> Self {
+    pub fn row_top_offset(mut self, row_top_offset: impl Fn(u64) -> f32 + 'a) -> Self {
         self.row_top_offset = Box::new(row_top_offset);
         self
     }
@@ -469,10 +469,10 @@ fn update(map: &mut BTreeMap<usize, ColumnResizer>, key: usize, value: ColumnRes
     }
 }
 
-struct TableSplitScrollDelegate<'a> {
+struct TableSplitScrollDelegate<'a, 'b> {
     id: Id,
     table_delegate: &'a mut dyn TableDelegate,
-    table: &'a mut Table,
+    table: &'a mut Table<'b>,
     state: &'a mut TableState,
 
     /// The x coordinate for the start of each column, plus the end of the last column.
@@ -492,7 +492,7 @@ struct TableSplitScrollDelegate<'a> {
     has_prefetched: bool,
 }
 
-impl<'a> TableSplitScrollDelegate<'a> {
+impl<'a, 'b> TableSplitScrollDelegate<'a, 'b> {
     fn header_ui(&mut self, ui: &mut Ui, offset: Vec2) {
         for (row_nr, header_row) in self.table.headers.iter().enumerate() {
             let groups = if header_row.groups.is_empty() {
@@ -689,7 +689,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
     }
 }
 
-impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
+impl<'a, 'b> SplitScrollDelegate for TableSplitScrollDelegate<'a, 'b> {
     // First to be called
     fn right_bottom_ui(&mut self, ui: &mut Ui) {
         if self.table.scroll_to_columns.is_some() || self.table.scroll_to_rows.is_some() {
