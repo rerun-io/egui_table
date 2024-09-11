@@ -186,7 +186,7 @@ pub trait TableDelegate {
     /// [`Self::default_row_height`].
     ///
     /// Note: must always return 0.0 for `row_nr = 0`.
-    fn row_top_offset(&self, _ctx: &Context, _table_id_salt: Id, row_nr: u64) -> f32 {
+    fn row_top_offset(&self, _ctx: &Context, _table_id: Id, row_nr: u64) -> f32 {
         row_nr as f32 * self.default_row_height()
     }
 
@@ -311,21 +311,23 @@ impl Table {
     fn get_row_top_offset(
         &self,
         ctx: &Context,
+        table_id: Id,
         table_delegate: &dyn TableDelegate,
         row_nr: u64,
     ) -> f32 {
-        table_delegate.row_top_offset(ctx, self.id_salt, row_nr)
+        table_delegate.row_top_offset(ctx, table_id, row_nr)
     }
 
     /// Which row contains the given y offset (from the top)?
     fn get_row_nr_at_y_offset(
         &self,
         ctx: &Context,
+        table_id: Id,
         table_delegate: &dyn TableDelegate,
         y_offset: f32,
     ) -> u64 {
         partition_point(0..=self.num_rows, |row_nr| {
-            y_offset <= self.get_row_top_offset(ctx, table_delegate, row_nr)
+            y_offset <= self.get_row_top_offset(ctx, table_id, table_delegate, row_nr)
         })
         .saturating_sub(1)
     }
@@ -420,7 +422,7 @@ impl Table {
                         .iter()
                         .map(|c| c.current)
                         .sum(),
-                    self.get_row_top_offset(ui.ctx(), table_delegate, self.num_rows),
+                    self.get_row_top_offset(ui.ctx(), id, table_delegate, self.num_rows),
                 ),
             }
             .show(
@@ -436,6 +438,7 @@ impl Table {
                     visible_column_lines: Default::default(),
                     do_full_sizing_pass,
                     has_prefetched: false,
+                    egui_ctx: ui.ctx().clone(),
                 },
             );
         });
@@ -483,9 +486,23 @@ struct TableSplitScrollDelegate<'a> {
     do_full_sizing_pass: bool,
 
     has_prefetched: bool,
+
+    egui_ctx: Context,
 }
 
 impl<'a> TableSplitScrollDelegate<'a> {
+    /// Helper wrapper around [`TableDelegate::row_top_offset`].
+    fn get_row_top_offset(&self, row_nr: u64) -> f32 {
+        self.table
+            .get_row_top_offset(&self.egui_ctx, self.id, self.table_delegate, row_nr)
+    }
+
+    /// Helper wrapper around [`TableDelegate::get_row_nr_at_y_offset`].
+    fn get_row_nr_at_y_offset(&self, y_offset: f32) -> u64 {
+        self.table
+            .get_row_nr_at_y_offset(&self.egui_ctx, self.id, self.table_delegate, y_offset)
+    }
+
     fn header_ui(&mut self, ui: &mut Ui, offset: Vec2) {
         for (row_nr, header_row) in self.table.headers.iter().enumerate() {
             let groups = if header_row.groups.is_empty() {
@@ -601,11 +618,7 @@ impl<'a> TableSplitScrollDelegate<'a> {
         } else {
             // Only paint the visible rows:
             let row_idx_at = |y: f32| -> u64 {
-                let row_nr = self.table.get_row_nr_at_y_offset(
-                    ui.ctx(),
-                    self.table_delegate,
-                    y - self.header_row_y.last(),
-                );
+                let row_nr = self.get_row_nr_at_y_offset(y - self.header_row_y.last());
                 row_nr.at_most(self.table.num_rows.saturating_sub(1))
             };
 
@@ -634,14 +647,8 @@ impl<'a> TableSplitScrollDelegate<'a> {
 
         for row_nr in row_range {
             let y_range = Rangef::new(
-                self.header_row_y.last()
-                    + self
-                        .table
-                        .get_row_top_offset(ui.ctx(), self.table_delegate, row_nr),
-                self.header_row_y.last()
-                    + self
-                        .table
-                        .get_row_top_offset(ui.ctx(), self.table_delegate, row_nr + 1),
+                self.header_row_y.last() + self.get_row_top_offset(row_nr),
+                self.header_row_y.last() + self.get_row_top_offset(row_nr + 1),
             );
 
             for col_nr in col_range.clone() {
@@ -717,9 +724,7 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
 
             if let Some((row_range, align)) = &self.table.scroll_to_rows {
                 let y_from_row_nr = |row_nr: u64| -> f32 {
-                    let mut y =
-                        self.table
-                            .get_row_top_offset(ui.ctx(), self.table_delegate, row_nr);
+                    let mut y = self.get_row_top_offset(row_nr);
 
                     let sticky_height = self.header_row_y.last() - self.header_row_y.first();
                     if y < sticky_height {

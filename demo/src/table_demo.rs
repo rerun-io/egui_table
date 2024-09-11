@@ -178,7 +178,7 @@ impl egui_table::TableDelegate for TableDemo {
             });
     }
 
-    fn row_top_offset(&self, ctx: &Context, _table_id_salt: Id, row_nr: u64) -> f32 {
+    fn row_top_offset(&self, ctx: &Context, _table_id: Id, row_nr: u64) -> f32 {
         let fully_expanded_row_height = 48.0;
 
         self.is_row_expanded
