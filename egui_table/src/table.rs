@@ -308,6 +308,7 @@ impl Table {
     /// The top y coordinate offset of a specific row nr.
     ///
     /// `get_row_top_offset(0)` should always return 0.0.
+    #[allow(clippy::unused_self)] // for uniformity
     fn get_row_top_offset(
         &self,
         ctx: &Context,
@@ -491,13 +492,13 @@ struct TableSplitScrollDelegate<'a> {
 }
 
 impl<'a> TableSplitScrollDelegate<'a> {
-    /// Helper wrapper around [`TableDelegate::row_top_offset`].
+    /// Helper wrapper around [`Table::get_row_top_offset`].
     fn get_row_top_offset(&self, row_nr: u64) -> f32 {
         self.table
             .get_row_top_offset(&self.egui_ctx, self.id, self.table_delegate, row_nr)
     }
 
-    /// Helper wrapper around [`TableDelegate::get_row_nr_at_y_offset`].
+    /// Helper wrapper around [`Table::get_row_nr_at_y_offset`].
     fn get_row_nr_at_y_offset(&self, y_offset: f32) -> u64 {
         self.table
             .get_row_nr_at_y_offset(&self.egui_ctx, self.id, self.table_delegate, y_offset)
