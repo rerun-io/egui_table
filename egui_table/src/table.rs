@@ -189,7 +189,10 @@ pub trait TableDelegate {
     /// Implementing this provides a way to have arbitrary row heights. If [`Table::default_row_height`]
     /// is not used, this method must never return `None`.
     ///
-    /// Note: `row_top_offset(0)` should always return either `Some(0.0)` or `None`.
+    /// Important:
+    /// - Must return always `None`, or always `Some(offset)`. Returning both will lead to
+    ///   inconsistent results.
+    /// - Must always return either `Some(0.0)` or `None` for `row_nr = 0`.
     fn row_top_offset(&self, _ctx: &Context, _row_nr: u64) -> Option<f32> {
         None
     }
@@ -323,12 +326,21 @@ impl Table {
         table_delegate: &dyn TableDelegate,
         row_nr: u64,
     ) -> f32 {
-        table_delegate.row_top_offset(ctx, row_nr).or(self.default_row_height).expect(
-            "Either `default_row_height` must be called or delegate's `row_top_offset` must never \
-            return `None`.")
+        // TODO(ab): this will return inconsistent results when `TableDelegate::row_top_offset`
+        // returns `None` and `Some(offset)` inconsistently.
+        table_delegate
+            .row_top_offset(ctx, row_nr)
+            .or_else(|| {
+                self.default_row_height
+                    .map(|row_height| row_height * row_nr as f32)
+            })
+            .expect(
+                "`Table::default_row_height` must be used if `TableDelegate::row_top_offset` \
+                returns `None`.",
+            )
     }
 
-    /// Which row contains the given y offset (from the top)?
+    /// Which row contains the given y offset (from the top)?"
     fn get_row_nr_at_y_offset(
         &self,
         ctx: &Context,
