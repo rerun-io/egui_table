@@ -106,9 +106,6 @@ pub struct Table {
     /// The count and parameters of the sticky (non-scrolling) header rows.
     headers: Vec<HeaderRow>,
 
-    /// Default row height.
-    default_row_height: Option<f32>,
-
     /// Total number of rows (sticky + non-sticky).
     num_rows: u64,
 
@@ -126,7 +123,6 @@ impl Default for Table {
             id_salt: Id::new("table"),
             num_sticky_cols: 0,
             headers: vec![HeaderRow::new(16.0)],
-            default_row_height: None,
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
             scroll_to_columns: None,
@@ -186,15 +182,19 @@ pub trait TableDelegate {
 
     /// Compute the offset for the top of the given row.
     ///
-    /// Implementing this provides a way to have arbitrary row heights. If [`Table::default_row_height`]
-    /// is not used, this method must never return `None`.
+    /// Implement this for arbitrary row heights. The default implementation uses
+    /// [`Self::default_row_height`].
     ///
-    /// Important:
-    /// - Must return always `None`, or always `Some(offset)`. Returning both will lead to
-    ///   inconsistent results.
-    /// - Must always return either `Some(0.0)` or `None` for `row_nr = 0`.
-    fn row_top_offset(&self, _ctx: &Context, _row_nr: u64) -> Option<f32> {
-        None
+    /// Note: must always return 0.0 for `row_nr = 0`.
+    fn row_top_offset(&self, _ctx: &Context, _table_id_salt: Id, row_nr: u64) -> f32 {
+        row_nr as f32 * self.default_row_height()
+    }
+
+    /// Default row height.
+    ///
+    /// This is used by the default implementation of [`Self::row_top_offset`].
+    fn default_row_height(&self) -> f32 {
+        20.0
     }
 }
 
@@ -242,18 +242,6 @@ impl Table {
     #[inline]
     pub fn headers(mut self, headers: impl Into<Vec<HeaderRow>>) -> Self {
         self.headers = headers.into();
-        self
-    }
-
-    /// Default height of the non-sticky rows.
-    ///
-    /// This row height is used when [`TableDelegate::row_top_offset`] returns `None` (which is the
-    /// default behavior). This is the recommended way for homogeneous row heights. For
-    /// heterogeneous row heights, provide a custom implementation for
-    /// [`TableDelegate::row_top_offset`] instead.
-    #[inline]
-    pub fn default_row_height(mut self, row_height: f32) -> Self {
-        self.default_row_height = Some(row_height);
         self
     }
 
@@ -326,21 +314,10 @@ impl Table {
         table_delegate: &dyn TableDelegate,
         row_nr: u64,
     ) -> f32 {
-        // TODO(ab): this will return inconsistent results when `TableDelegate::row_top_offset`
-        // returns `None` and `Some(offset)` inconsistently.
-        table_delegate
-            .row_top_offset(ctx, row_nr)
-            .or_else(|| {
-                self.default_row_height
-                    .map(|row_height| row_height * row_nr as f32)
-            })
-            .expect(
-                "`Table::default_row_height` must be used if `TableDelegate::row_top_offset` \
-                returns `None`.",
-            )
+        table_delegate.row_top_offset(ctx, self.id_salt, row_nr)
     }
 
-    /// Which row contains the given y offset (from the top)?"
+    /// Which row contains the given y offset (from the top)?
     fn get_row_nr_at_y_offset(
         &self,
         ctx: &Context,

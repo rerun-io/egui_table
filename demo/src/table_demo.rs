@@ -178,19 +178,17 @@ impl egui_table::TableDelegate for TableDemo {
             });
     }
 
-    fn row_top_offset(&self, ctx: &Context, row_nr: u64) -> Option<f32> {
+    fn row_top_offset(&self, ctx: &Context, _table_id_salt: Id, row_nr: u64) -> f32 {
         let fully_expanded_row_height = 48.0;
-        let top_of_row_offset = self
-            .is_row_expanded
+
+        self.is_row_expanded
             .range(0..row_nr)
             .map(|(expanded_row_nr, expanded)| {
                 let how_expanded = ctx.animate_bool(Id::new(expanded_row_nr), *expanded);
                 how_expanded * fully_expanded_row_height
             })
             .sum::<f32>()
-            + row_nr as f32 * self.row_height;
-
-        Some(top_of_row_offset)
+            + row_nr as f32 * self.row_height
     }
 }
 
