@@ -3,7 +3,9 @@ use std::{
     ops::{Range, RangeInclusive},
 };
 
-use egui::{vec2, Align, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b};
+use egui::{
+    vec2, Align, Context, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b,
+};
 use vec1::Vec1;
 
 use crate::{columns::Column, SplitScroll, SplitScrollDelegate};
@@ -88,7 +90,7 @@ impl HeaderRow {
 /// * Does not add any margins to cells. Add it yourself with [`egui::Frame`].
 /// * Does not wrap cells in scroll areas. Do that yourself.
 /// * Doesn't paint any guide-lines for the rows. Paint them yourself.
-pub struct Table<'cb> {
+pub struct Table {
     /// The columns of the table.
     columns: Vec<Column>,
 
@@ -104,8 +106,8 @@ pub struct Table<'cb> {
     /// The count and parameters of the sticky (non-scrolling) header rows.
     headers: Vec<HeaderRow>,
 
-    /// Height of the non-sticky rows.
-    row_top_offset: Box<dyn Fn(u64) -> f32 + 'cb>,
+    /// Default row height.
+    default_row_height: Option<f32>,
 
     /// Total number of rows (sticky + non-sticky).
     num_rows: u64,
@@ -117,14 +119,14 @@ pub struct Table<'cb> {
     scroll_to_rows: Option<(RangeInclusive<u64>, Option<Align>)>,
 }
 
-impl<'cb> Default for Table<'cb> {
+impl Default for Table {
     fn default() -> Self {
         Self {
             columns: vec![],
             id_salt: Id::new("table"),
             num_sticky_cols: 0,
             headers: vec![HeaderRow::new(16.0)],
-            row_top_offset: Box::new(|row_nr| 16.0 * row_nr as f32),
+            default_row_height: None,
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
             scroll_to_columns: None,
@@ -181,9 +183,19 @@ pub trait TableDelegate {
     ///
     /// The [`CellInfo::row_nr`] is ignoring header rows.
     fn cell_ui(&mut self, ui: &mut Ui, cell: &CellInfo);
+
+    /// Compute the offset for the top of the given row.
+    ///
+    /// Implementing this provides a way to have arbitrary row heights. If [`Table::default_row_height`]
+    /// is not used, this method must never return `None`.
+    ///
+    /// Note: `row_top_offset(0)` should always return either `Some(0.0)` or `None`.
+    fn row_top_offset(&self, _ctx: &Context, _row_nr: u64) -> Option<f32> {
+        None
+    }
 }
 
-impl<'cb> Table<'cb> {
+impl Table {
     /// Create a new table, with no columns and no headers, and zero rows.
     #[inline]
     pub fn new() -> Self {
@@ -230,35 +242,15 @@ impl<'cb> Table<'cb> {
         self
     }
 
-    /// Height of the non-sticky rows.
+    /// Default height of the non-sticky rows.
     ///
-    /// This is for tables with rows of uniform height.
-    /// If you want heterogenous rwo heights, use [`Self::row_top_offset`] instead.
+    /// This row height is used when [`TableDelegate::row_top_offset`] returns `None` (which is the
+    /// default behavior). This is the recommended way for homogeneous row heights. For
+    /// heterogeneous row heights, provide a custom implementation for
+    /// [`TableDelegate::row_top_offset`] instead.
     #[inline]
-    pub fn row_height(mut self, row_height: f32) -> Self {
-        self.row_top_offset = Box::new(move |row_nr| row_nr as f32 * row_height);
-        self
-    }
-
-    /// Sets up where the bottom of each row is.
-    ///
-    /// This is for when you have heterogenous row heights,
-    /// i.e. different rows has different heights.
-    ///
-    /// The function should return the y-offset of the top edge of a specific row.
-    /// For instance, it could return:
-    ///
-    /// * `f(0) => 0.0`
-    /// * `f(1) => 20.0`
-    /// * `f(2) => 30.0`
-    /// * `f(3) => 40.0`
-    ///
-    /// The bottom of the last row will be calculated as `f(num_rows)`.
-    ///
-    /// This function may be called hundreds of times, so make it fast!
-    #[inline]
-    pub fn row_top_offset(mut self, row_top_offset: impl Fn(u64) -> f32 + 'cb) -> Self {
-        self.row_top_offset = Box::new(row_top_offset);
+    pub fn default_row_height(mut self, row_height: f32) -> Self {
+        self.default_row_height = Some(row_height);
         self
     }
 
@@ -325,14 +317,26 @@ impl<'cb> Table<'cb> {
     /// The top y coordinate offset of a specific row nr.
     ///
     /// `get_row_top_offset(0)` should always return 0.0.
-    fn get_row_top_offset(&self, row_nr: u64) -> f32 {
-        (self.row_top_offset)(row_nr)
+    fn get_row_top_offset(
+        &self,
+        ctx: &Context,
+        table_delegate: &dyn TableDelegate,
+        row_nr: u64,
+    ) -> f32 {
+        table_delegate.row_top_offset(ctx, row_nr).or(self.default_row_height).expect(
+            "Either `default_row_height` must be called or delegate's `row_top_offset` must never \
+            return `None`.")
     }
 
     /// Which row contains the given y offset (from the top)?
-    fn get_row_nr_at_y_offset(&self, y_offset: f32) -> u64 {
+    fn get_row_nr_at_y_offset(
+        &self,
+        ctx: &Context,
+        table_delegate: &dyn TableDelegate,
+        y_offset: f32,
+    ) -> u64 {
         partition_point(0..=self.num_rows, |row_nr| {
-            y_offset <= self.get_row_top_offset(row_nr)
+            y_offset <= self.get_row_top_offset(ctx, table_delegate, row_nr)
         })
         .saturating_sub(1)
     }
@@ -427,7 +431,7 @@ impl<'cb> Table<'cb> {
                         .iter()
                         .map(|c| c.current)
                         .sum(),
-                    self.get_row_top_offset(self.num_rows),
+                    self.get_row_top_offset(ui.ctx(), table_delegate, self.num_rows),
                 ),
             }
             .show(
@@ -469,10 +473,10 @@ fn update(map: &mut BTreeMap<usize, ColumnResizer>, key: usize, value: ColumnRes
     }
 }
 
-struct TableSplitScrollDelegate<'a, 'cb> {
+struct TableSplitScrollDelegate<'a> {
     id: Id,
     table_delegate: &'a mut dyn TableDelegate,
-    table: &'a mut Table<'cb>,
+    table: &'a mut Table,
     state: &'a mut TableState,
 
     /// The x coordinate for the start of each column, plus the end of the last column.
@@ -492,7 +496,7 @@ struct TableSplitScrollDelegate<'a, 'cb> {
     has_prefetched: bool,
 }
 
-impl<'a, 'cb> TableSplitScrollDelegate<'a, 'cb> {
+impl<'a> TableSplitScrollDelegate<'a> {
     fn header_ui(&mut self, ui: &mut Ui, offset: Vec2) {
         for (row_nr, header_row) in self.table.headers.iter().enumerate() {
             let groups = if header_row.groups.is_empty() {
@@ -608,9 +612,11 @@ impl<'a, 'cb> TableSplitScrollDelegate<'a, 'cb> {
         } else {
             // Only paint the visible rows:
             let row_idx_at = |y: f32| -> u64 {
-                let row_nr = self
-                    .table
-                    .get_row_nr_at_y_offset(y - self.header_row_y.last());
+                let row_nr = self.table.get_row_nr_at_y_offset(
+                    ui.ctx(),
+                    self.table_delegate,
+                    y - self.header_row_y.last(),
+                );
                 row_nr.at_most(self.table.num_rows.saturating_sub(1))
             };
 
@@ -639,8 +645,14 @@ impl<'a, 'cb> TableSplitScrollDelegate<'a, 'cb> {
 
         for row_nr in row_range {
             let y_range = Rangef::new(
-                self.header_row_y.last() + self.table.get_row_top_offset(row_nr),
-                self.header_row_y.last() + self.table.get_row_top_offset(row_nr + 1),
+                self.header_row_y.last()
+                    + self
+                        .table
+                        .get_row_top_offset(ui.ctx(), self.table_delegate, row_nr),
+                self.header_row_y.last()
+                    + self
+                        .table
+                        .get_row_top_offset(ui.ctx(), self.table_delegate, row_nr + 1),
             );
 
             for col_nr in col_range.clone() {
@@ -689,7 +701,7 @@ impl<'a, 'cb> TableSplitScrollDelegate<'a, 'cb> {
     }
 }
 
-impl<'a, 'cb> SplitScrollDelegate for TableSplitScrollDelegate<'a, 'cb> {
+impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
     // First to be called
     fn right_bottom_ui(&mut self, ui: &mut Ui) {
         if self.table.scroll_to_columns.is_some() || self.table.scroll_to_rows.is_some() {
@@ -716,7 +728,9 @@ impl<'a, 'cb> SplitScrollDelegate for TableSplitScrollDelegate<'a, 'cb> {
 
             if let Some((row_range, align)) = &self.table.scroll_to_rows {
                 let y_from_row_nr = |row_nr: u64| -> f32 {
-                    let mut y = self.table.get_row_top_offset(row_nr);
+                    let mut y =
+                        self.table
+                            .get_row_top_offset(ui.ctx(), self.table_delegate, row_nr);
 
                     let sticky_height = self.header_row_y.last() - self.header_row_y.first();
                     if y < sticky_height {
