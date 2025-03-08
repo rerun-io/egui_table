@@ -250,6 +250,11 @@ impl TableDemo {
                     egui_table::AutoSizeMode::OnParentResize,
                     "OnParentResize",
                 );
+                ui.radio_value(
+                    &mut self.auto_size_mode,
+                    egui_table::AutoSizeMode::Fill,
+                    "Fill",
+                );
             });
             ui.end_row();
         });

@@ -22,6 +22,9 @@ pub enum AutoSizeMode {
 
     /// Auto-size the columns if the parents' width changes
     OnParentResize,
+
+    /// Auto-size the columns only if the parents' width is greater than the minimum width
+    Fill,
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
@@ -375,6 +378,9 @@ impl Table {
             AutoSizeMode::Never => false,
             AutoSizeMode::Always => true,
             AutoSizeMode::OnParentResize => state.parent_width.map_or(true, |w| w != parent_width),
+            AutoSizeMode::Fill => state.parent_width.map_or(true, |w| {
+                w > self.columns.iter().map(|col| col.current).sum()
+            }),
         };
         if auto_size {
             Column::auto_size(&mut self.columns, parent_width);
