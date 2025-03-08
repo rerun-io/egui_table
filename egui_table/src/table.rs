@@ -772,23 +772,31 @@ impl<'a> SplitScrollDelegate for TableSplitScrollDelegate<'a> {
             ui.scroll_to_rect(target_rect, target_align);
         }
 
-        self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min, true);
+        ui.push_id("right_bottom", |ui| {
+            self.region_ui(ui, ui.clip_rect().min - ui.min_rect().min, true);
+        });
     }
 
     fn left_top_ui(&mut self, ui: &mut Ui) {
-        self.header_ui(ui, Vec2::ZERO);
+        ui.push_id("left_top", |ui| {
+            self.header_ui(ui, Vec2::ZERO);
+        });
     }
 
     fn right_top_ui(&mut self, ui: &mut Ui) {
-        self.header_ui(ui, vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0));
+        ui.push_id("right_top", |ui| {
+            self.header_ui(ui, vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0));
+        });
     }
 
     fn left_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(
-            ui,
-            vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y),
-            false,
-        );
+        ui.push_id("left_bottom", |ui| {
+            self.region_ui(
+                ui,
+                vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y),
+                false,
+            );
+        });
     }
 
     fn finish(&mut self, ui: &mut Ui) {
