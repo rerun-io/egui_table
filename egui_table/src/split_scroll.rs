@@ -1,4 +1,4 @@
-use egui::{pos2, vec2, Rect, Ui, UiBuilder, Vec2, Vec2b};
+use egui::{pos2, scroll_area::ScrollBarVisibility, vec2, Rect, Ui, UiBuilder, Vec2, Vec2b};
 /// A scroll area with some portion of its left and/or top side "stuck".
 ///
 /// This produces four quadrants:
@@ -26,6 +26,17 @@ use egui::{pos2, vec2, Rect, Ui, UiBuilder, Vec2, Vec2b};
 #[derive(Clone, Copy, Debug)]
 pub struct SplitScroll {
     pub scroll_enabled: Vec2b,
+
+    /// Should the scroll area animate `scroll_to_*` functions?
+    pub animated: bool,
+
+    /// Can the user drag the scroll area to scroll?
+    ///
+    /// This is useful for touch screens.
+    pub drag_to_scroll: bool,
+
+    /// Set the visibility of both horizontal and vertical scroll bars.
+    pub scroll_bar_visibility: ScrollBarVisibility,
 
     /// Width of the fixed left side, and height of the fixed top.
     pub fixed_size: Vec2,
@@ -61,6 +72,9 @@ impl SplitScroll {
     pub fn show(self, ui: &mut Ui, delegate: &mut dyn SplitScrollDelegate) {
         let Self {
             scroll_enabled,
+            animated,
+            drag_to_scroll,
+            scroll_bar_visibility,
             fixed_size,
             scroll_outer_size,
             scroll_content_size,
@@ -85,6 +99,9 @@ impl SplitScroll {
                 let mut scroll_ui = ui.new_child(UiBuilder::new().max_rect(rect));
 
                 egui::ScrollArea::new(scroll_enabled)
+                    .animated(animated)
+                    .drag_to_scroll(drag_to_scroll)
+                    .scroll_bar_visibility(scroll_bar_visibility)
                     .auto_shrink(false)
                     .scroll_bar_rect(bottom_right_rect)
                     .show_viewport(&mut scroll_ui, |ui, scroll_offset| {
