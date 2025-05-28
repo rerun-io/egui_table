@@ -4,7 +4,8 @@ use std::{
 };
 
 use egui::{
-    vec2, Align, Context, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b,
+    scroll_area::ScrollBarVisibility, vec2, Align, Context, Id, IdMap, NumExt as _, Rangef, Rect,
+    Ui, UiBuilder, Vec2, Vec2b,
 };
 use vec1::Vec1;
 
@@ -115,6 +116,17 @@ pub struct Table {
     /// How to do auto-sizing of columns, if at all.
     auto_size_mode: AutoSizeMode,
 
+    /// Should the scroll area animate `scroll_to_*` functions?
+    animated: bool,
+
+    /// Can the user drag the scroll area to scroll?
+    ///
+    /// This is useful for touch screens.
+    drag_to_scroll: bool,
+
+    /// Set the visibility of both horizontal and vertical scroll bars.
+    scroll_bar_visibility: ScrollBarVisibility,
+
     scroll_to_columns: Option<(RangeInclusive<usize>, Option<Align>)>,
     scroll_to_rows: Option<(RangeInclusive<u64>, Option<Align>)>,
 }
@@ -128,6 +140,9 @@ impl Default for Table {
             headers: vec![HeaderRow::new(16.0)],
             num_rows: 0,
             auto_size_mode: AutoSizeMode::default(),
+            animated: true,
+            drag_to_scroll: true,
+            scroll_bar_visibility: ScrollBarVisibility::default(),
             scroll_to_columns: None,
             scroll_to_rows: None,
         }
@@ -265,6 +280,29 @@ impl Table {
     #[inline]
     pub fn auto_size_mode(mut self, auto_size_mode: AutoSizeMode) -> Self {
         self.auto_size_mode = auto_size_mode;
+        self
+    }
+
+    /// Should the table animate `scroll_to_*` functions?
+    #[inline]
+    pub fn animated(mut self, animated: bool) -> Self {
+        self.animated = animated;
+        self
+    }
+
+    /// Can the user drag the table to scroll?
+    ///
+    /// This is useful for touch screens.
+    #[inline]
+    pub fn drag_to_scroll(mut self, drag_to_scroll: bool) -> Self {
+        self.drag_to_scroll = drag_to_scroll;
+        self
+    }
+
+    /// Set the visibility of both horizontal and vertical scroll bars.
+    #[inline]
+    pub fn scroll_bar_visibility(mut self, scroll_bar_visibility: ScrollBarVisibility) -> Self {
+        self.scroll_bar_visibility = scroll_bar_visibility;
         self
     }
 
@@ -436,6 +474,9 @@ impl Table {
 
             SplitScroll {
                 scroll_enabled: Vec2b::new(true, true),
+                animated: self.animated,
+                drag_to_scroll: self.drag_to_scroll,
+                scroll_bar_visibility: self.scroll_bar_visibility,
                 fixed_size: sticky_size,
                 scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
                 scroll_content_size: Vec2::new(
