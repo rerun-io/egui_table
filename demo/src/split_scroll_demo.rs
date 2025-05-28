@@ -12,6 +12,9 @@ impl SplitScrollDemo {
 
         SplitScroll {
             scroll_enabled: Vec2b::new(true, true),
+            animated: true,
+            drag_to_scroll: true,
+            scroll_bar_visibility: egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
             fixed_size: vec2(123.0, 37.0),
             scroll_outer_size: vec2(600.0, 400.0),
             scroll_content_size: vec2(10_000.0, 10_000.0),

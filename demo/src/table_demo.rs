@@ -9,6 +9,8 @@ pub struct TableDemo {
     num_sticky_cols: usize,
     default_column: egui_table::Column,
     auto_size_mode: egui_table::AutoSizeMode,
+    animated: bool,
+    scroll_bar_visibility: egui::scroll_area::ScrollBarVisibility,
     top_row_height: f32,
     row_height: f32,
     is_row_expanded: BTreeMap<u64, bool>,
@@ -25,6 +27,8 @@ impl Default for TableDemo {
                 .range(10.0..=500.0)
                 .resizable(true),
             auto_size_mode: egui_table::AutoSizeMode::default(),
+            animated: true,
+            scroll_bar_visibility: egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
             top_row_height: 24.0,
             row_height: 18.0,
             is_row_expanded: Default::default(),
@@ -252,6 +256,26 @@ impl TableDemo {
                 );
             });
             ui.end_row();
+
+            ui.label("Scroll bar visibility");
+            ui.horizontal(|ui| {
+                ui.radio_value(
+                    &mut self.scroll_bar_visibility,
+                    egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
+                    "AlwaysHidden",
+                );
+                ui.radio_value(
+                    &mut self.scroll_bar_visibility,
+                    egui::scroll_area::ScrollBarVisibility::AlwaysVisible,
+                    "AlwaysVisible",
+                );
+                ui.radio_value(
+                    &mut self.scroll_bar_visibility,
+                    egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                    "VisibleWhenNeeded",
+                );
+            });
+            ui.end_row();
         });
 
         let id_salt = Id::new("table_demo");
@@ -317,6 +341,8 @@ impl TableDemo {
             }
         });
 
+        ui.horizontal(|ui| ui.checkbox(&mut self.animated, "Animate scrolls"));
+
         ui.separator();
 
         let mut table = egui_table::Table::new()
@@ -331,7 +357,9 @@ impl TableDemo {
                 },
                 egui_table::HeaderRow::new(self.top_row_height),
             ])
-            .auto_size_mode(self.auto_size_mode);
+            .auto_size_mode(self.auto_size_mode)
+            .animated(self.animated)
+            .scroll_bar_visibility(self.scroll_bar_visibility);
 
         if let Some(scroll_to_column) = scroll_to_column {
             table = table.scroll_to_column(scroll_to_column, None);
