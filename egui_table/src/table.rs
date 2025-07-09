@@ -1,14 +1,14 @@
 use std::{
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{BTreeMap, btree_map::Entry},
     ops::{Range, RangeInclusive},
 };
 
 use egui::{
-    vec2, Align, Context, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b,
+    Align, Context, Id, IdMap, NumExt as _, Rangef, Rect, Ui, UiBuilder, Vec2, Vec2b, vec2,
 };
 use vec1::Vec1;
 
-use crate::{columns::Column, SplitScroll, SplitScrollDelegate};
+use crate::{SplitScroll, SplitScrollDelegate, columns::Column};
 
 // TODO: fix the functionality of this
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
