@@ -165,7 +165,7 @@ impl egui_table::TableDelegate for TableDemo {
 
     // You can use row_ui to add some style or interaction to the entire row.
     fn row_ui(&mut self, ui: &mut Ui, _row_nr: u64) {
-        if ui.rect_contains_pointer(ui.response().rect) {
+        if ui.rect_contains_pointer(ui.max_rect()) {
             ui.painter()
                 .rect_filled(ui.max_rect(), 0.0, ui.visuals().code_bg_color);
         }
