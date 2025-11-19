@@ -1,6 +1,6 @@
 use demo::DemoApp;
+use egui_kittest::kittest::Queryable as _;
 use egui_kittest::{Harness, SnapshotResults};
-use egui_kittest::kittest::Queryable;
 
 #[test]
 pub fn table_snapshot() {
@@ -11,6 +11,6 @@ pub fn table_snapshot() {
 
     harness.get_by_label("Scroll").click();
     harness.run();
-    
+
     results.add(harness.try_snapshot("scroll_demo"));
 }
