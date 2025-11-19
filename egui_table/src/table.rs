@@ -95,7 +95,7 @@ impl HeaderRow {
 /// * Doesn't paint any guide-lines for the rows. Paint them yourself.
 pub struct Table {
     /// The columns of the table.
-    pub(crate) columns: Vec<Column>,
+    columns: Vec<Column>,
 
     /// Salt added to the parent [`Ui::id`] to produce an [`Id`] that is unique
     /// within the parent [`Ui`].
