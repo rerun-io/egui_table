@@ -759,37 +759,26 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
             let mut target_align = None;
 
             if let Some((column_range, align)) = &self.table.scroll_to_columns {
-                let x_from_column_nr = |col_nr: usize| -> f32 {
-                    let mut x = self.col_x[col_nr];
+                let x_from_column_nr =
+                    |col_nr: usize| -> f32 { ui.min_rect().left() + self.col_x[col_nr] };
 
-                    let sitcky_width = self.col_x[self.table.num_sticky_cols] - self.col_x.first();
-                    if x < sitcky_width {
-                        // We need to do some shenanigans here because how the `SplitScroll` works:
-                        x -= sitcky_width;
-                    }
+                let sticky_width = self.col_x[self.table.num_sticky_cols] - self.col_x.first();
 
-                    ui.min_rect().left() + x
-                };
-
-                target_rect.min.x = x_from_column_nr(*column_range.start());
+                target_rect.min.x = x_from_column_nr(*column_range.start()) - sticky_width;
                 target_rect.max.x = x_from_column_nr(*column_range.end() + 1);
                 target_align = target_align.or(*align);
             }
 
             if let Some((row_range, align)) = &self.table.scroll_to_rows {
-                let y_from_row_nr = |row_nr: u64| -> f32 {
-                    let mut y = self.get_row_top_offset(row_nr);
+                let y_from_row_nr =
+                    |row_nr: u64| -> f32 { ui.min_rect().top() + self.get_row_top_offset(row_nr) };
 
-                    let sticky_height = self.header_row_y.last() - self.header_row_y.first();
-                    if y < sticky_height {
-                        // We need to do some shenanigans here because how the `SplitScroll` works:
-                        y -= sticky_height;
-                    }
+                let sticky_height = self.header_row_y.last() - self.header_row_y.first();
 
-                    ui.min_rect().top() + y
-                };
-
-                target_rect.min.y = y_from_row_nr(*row_range.start());
+                // Subtract sticky_height from the top of the target rect so that when
+                // scroll_to_rect aligns the top of the target to the viewport top, the
+                // actual row lands just below the sticky header (not behind it).
+                target_rect.min.y = y_from_row_nr(*row_range.start()) - sticky_height;
                 target_rect.max.y = y_from_row_nr(*row_range.end() + 1);
                 target_align = target_align.or(*align);
             }
