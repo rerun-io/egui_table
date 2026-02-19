@@ -759,11 +759,19 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
             let mut target_align = None;
 
             if let Some((column_range, align)) = &self.table.scroll_to_columns {
-                let x_from_column_nr =
-                    |col_nr: usize| -> f32 { ui.min_rect().left() + self.col_x[col_nr] };
+                // Use the first scrollable column as the base, so that offsets start
+                // at 0 for the first non-sticky column — mirroring how row_top_offset
+                // starts at 0 for the first data row.
+                let scrollable_col_x_base = self.col_x[self.table.num_sticky_cols];
+                let x_from_column_nr = |col_nr: usize| -> f32 {
+                    ui.min_rect().left() + (self.col_x[col_nr] - scrollable_col_x_base)
+                };
 
-                let sticky_width = self.col_x[self.table.num_sticky_cols] - self.col_x.first();
+                let sticky_width = scrollable_col_x_base - self.col_x.first();
 
+                // Subtract sticky_width from the left of the target rect so that when
+                // scroll_to_rect aligns the left of the target to the viewport left, the
+                // actual column lands just right of the sticky columns (not behind them).
                 target_rect.min.x = x_from_column_nr(*column_range.start()) - sticky_width;
                 target_rect.max.x = x_from_column_nr(*column_range.end() + 1);
                 target_align = target_align.or(*align);
