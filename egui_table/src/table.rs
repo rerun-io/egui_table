@@ -3,10 +3,7 @@ use std::{
     ops::{Range, RangeInclusive},
 };
 
-use egui::{
-    Align, Context, Id, IdMap, Layout, NumExt as _, Rangef, Rect, Response, Ui, UiBuilder, Vec2,
-    Vec2b, vec2,
-};
+use egui::{Align, Context, Id, IdMap, Layout, NumExt as _, Rangef, Rect, Response, Ui, UiBuilder, Vec2, Vec2b, vec2, IdSalt};
 use vec1::Vec1;
 
 use crate::{SplitScroll, SplitScrollDelegate, columns::Column};
@@ -42,7 +39,7 @@ impl TableState {
         ctx.data_mut(|d| d.insert_persisted(id, self));
     }
 
-    pub fn id(ui: &Ui, id_salt: Id) -> Id {
+    pub fn id(ui: &Ui, id_salt: IdSalt) -> Id {
         ui.make_persistent_id(id_salt)
     }
 
@@ -102,7 +99,7 @@ pub struct Table {
     /// within the parent [`Ui`].
     ///
     /// You need to set this to something unique if you have multiple tables in the same ui.
-    id_salt: Id,
+    id_salt: IdSalt,
 
     /// Which columns are sticky (non-scrolling)?
     num_sticky_cols: usize,
@@ -129,7 +126,7 @@ impl Default for Table {
     fn default() -> Self {
         Self {
             columns: vec![],
-            id_salt: Id::new("table"),
+            id_salt: IdSalt::new("table"),
             num_sticky_cols: 0,
             headers: vec![HeaderRow::new(16.0)],
             num_rows: 0,
@@ -241,8 +238,8 @@ impl Table {
     ///
     /// You need to set this to something unique if you have multiple tables in the same ui.
     #[inline]
-    pub fn id_salt(mut self, id_salt: impl std::hash::Hash) -> Self {
-        self.id_salt = Id::new(id_salt);
+    pub fn id_salt(mut self, id_salt: impl egui::AsIdSalt) -> Self {
+        self.id_salt = IdSalt::new(id_salt);
         self
     }
 
