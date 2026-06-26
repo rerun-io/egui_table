@@ -3,7 +3,10 @@ use std::{
     ops::{Range, RangeInclusive},
 };
 
-use egui::{Align, Context, Id, IdMap, Layout, NumExt as _, Rangef, Rect, Response, Ui, UiBuilder, Vec2, Vec2b, vec2, IdSalt};
+use egui::{
+    Align, Context, Id, IdMap, IdSalt, Layout, NumExt as _, Rangef, Rect, Response, Ui, UiBuilder,
+    Vec2, Vec2b, vec2,
+};
 use vec1::Vec1;
 
 use crate::{SplitScroll, SplitScrollDelegate, columns::Column};
