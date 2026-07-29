@@ -74,4 +74,10 @@ exclude = [
   'https://github.com/rerun-io/egui_table/commit/\.*', # Ignore links to our own commits (typically in changelog).
   'https://github.com/rerun-io/egui_table/pull/\.*',   # Ignore links to our own pull requests (typically in changelog).
   'https://www.unicode.org/.*',                        # Avoid unicode.org rate-limiting
+
+  # Badge images. These are generated on demand and time out under load; a 408 from one
+  # says nothing about link rot. The pages they link *to* are still checked.
+  # NB: this file is itself link-checked, so the pattern has to match its own text —
+  # an escaped `\.` would not, and lychee would try to fetch the pattern.
+  'https://docs.rs/.*badge.*',
 ]
