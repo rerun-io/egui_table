@@ -46,15 +46,15 @@ pub trait SplitScrollDelegate {
     fn left_top_ui(&mut self, ui: &mut Ui);
 
     /// The horizontally scrollable portion.
-    fn right_top_ui(&mut self, ui: &mut Ui);
+    fn right_top_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2);
 
     /// The vertically scrollable portion.
-    fn left_bottom_ui(&mut self, ui: &mut Ui);
+    fn left_bottom_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2);
 
     /// The fully scrollable portion.
     ///
     /// First to be called.
-    fn right_bottom_ui(&mut self, ui: &mut Ui);
+    fn right_bottom_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2);
 
     /// Called last.
     fn finish(&mut self, _ui: &mut Ui) {}
@@ -99,7 +99,7 @@ impl SplitScroll {
 
                         let mut shrunk_ui = ui.new_child(UiBuilder::new().max_rect(shrunk_rect));
                         shrunk_ui.shrink_clip_rect(bottom_right_rect);
-                        delegate.right_bottom_ui(&mut shrunk_ui);
+                        delegate.right_bottom_ui(&mut shrunk_ui, scroll_offset.min.to_vec2());
 
                         // It is very important that the scroll offset is synced between the
                         // right-bottom contents of the real scroll area,
@@ -133,7 +133,7 @@ impl SplitScroll {
                 let mut right_top_ui =
                     ui.new_child(UiBuilder::new().max_rect(right_top_content_rect));
                 right_top_ui.shrink_clip_rect(right_top_outer_rect);
-                delegate.right_top_ui(&mut right_top_ui);
+                delegate.right_top_ui(&mut right_top_ui, vec2(scroll_offset.x, 0.0));
             }
 
             {
@@ -148,7 +148,7 @@ impl SplitScroll {
                 let mut left_bottom_ui =
                     ui.new_child(UiBuilder::new().max_rect(left_bottom_content_rect));
                 left_bottom_ui.shrink_clip_rect(left_bottom_outer_rect);
-                delegate.left_bottom_ui(&mut left_bottom_ui);
+                delegate.left_bottom_ui(&mut left_bottom_ui, vec2(0.0, scroll_offset.y));
             }
 
             delegate.finish(ui);

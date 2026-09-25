@@ -5,7 +5,7 @@ use std::{
 
 use egui::{
     Align, Context, Id, IdMap, IdSalt, Layout, NumExt as _, Rangef, Rect, Response, Ui, UiBuilder,
-    Vec2, Vec2b, vec2,
+    Vec2, Vec2b,
 };
 use vec1::Vec1;
 
@@ -772,7 +772,7 @@ impl TableSplitScrollDelegate<'_> {
 
 impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
     // First to be called
-    fn right_bottom_ui(&mut self, ui: &mut Ui) {
+    fn right_bottom_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2) {
         if self.table.scroll_to_columns.is_some() || self.table.scroll_to_rows.is_some() {
             let mut target_rect = ui.clip_rect(); // no scrolling
             let mut target_align = None;
@@ -813,7 +813,6 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
             ui.scroll_to_rect(target_rect, target_align);
         }
 
-        let scroll_offset = ui.clip_rect().min - ui.min_rect().min;
         self.region_ui(ui, scroll_offset, true);
     }
 
@@ -821,17 +820,12 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
         self.header_ui(ui, Vec2::ZERO);
     }
 
-    fn right_top_ui(&mut self, ui: &mut Ui) {
-        let scroll_offset = vec2(ui.clip_rect().min.x - ui.min_rect().min.x, 0.0);
+    fn right_top_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2) {
         self.header_ui(ui, scroll_offset);
     }
 
-    fn left_bottom_ui(&mut self, ui: &mut Ui) {
-        self.region_ui(
-            ui,
-            vec2(0.0, ui.clip_rect().min.y - ui.min_rect().min.y),
-            false,
-        );
+    fn left_bottom_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2) {
+        self.region_ui(ui, scroll_offset, false);
     }
 
     fn finish(&mut self, ui: &mut Ui) {
