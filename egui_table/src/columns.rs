@@ -71,7 +71,7 @@ impl Column {
 
     #[inline]
     pub fn id_for(&self, col_idx: usize) -> egui::Id {
-        self.id.unwrap_or_else(|| egui::Id::new(col_idx))
+        self.id.unwrap_or_else(|| egui::Id::unique(col_idx))
     }
 
     /// Resize columns to fit the total width.

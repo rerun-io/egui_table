@@ -51,7 +51,7 @@ impl TableDemo {
             .get(&row_nr)
             .copied()
             .unwrap_or_default();
-        let expandedness = ui.animate_bool(Id::new(row_nr), is_expanded);
+        let expandedness = ui.animate_bool(Id::unique(row_nr), is_expanded);
 
         ui.vertical(|ui| {
             if col_nr == 0 {
@@ -196,7 +196,7 @@ impl egui_table::TableDelegate for TableDemo {
         self.is_row_expanded
             .range(0..row_nr)
             .map(|(expanded_row_nr, expanded)| {
-                let how_expanded = ctx.animate_bool(Id::new(expanded_row_nr), *expanded);
+                let how_expanded = ctx.animate_bool(Id::unique(expanded_row_nr), *expanded);
                 how_expanded * fully_expanded_row_height
             })
             .sum::<f32>()
@@ -274,7 +274,7 @@ impl TableDemo {
             ui.end_row();
         });
 
-        let id_salt = Id::new("table_demo");
+        let id_salt = egui::IdSalt::new("table_demo");
         let state_id = egui_table::Table::new().id_salt(id_salt).get_id(ui); // Note: must be here (in the correct outer `ui` scope) to be correct.
 
         ui.horizontal(|ui| {
