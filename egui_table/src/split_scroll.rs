@@ -43,10 +43,19 @@ pub struct SplitScroll {
 /// The contents of a [`SplitScroll`].
 pub trait SplitScrollDelegate {
     /// The fixed portion of the top left corner.
-    fn left_top_ui(&mut self, ui: &mut Ui);
+    fn left_top_ui(&mut self, _ui: &mut Ui) {}
 
     /// The horizontally scrollable portion.
-    fn right_top_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2);
+    fn right_top_ui(&mut self, _ui: &mut Ui, _scroll_offset: Vec2) {}
+
+    /// The whole top, both the fixed and the horizontally scrollable portion.
+    ///
+    /// Use this for content that spans both portions,
+    /// e.g. a table header group that covers both sticky and scrolling columns.
+    /// For other content, prefer [`Self::left_top_ui`] and [`Self::right_top_ui`].
+    ///
+    /// Called after [`Self::left_top_ui`] and [`Self::right_top_ui`].
+    fn top_ui(&mut self, _ui: &mut Ui, _scroll_offset: Vec2) {}
 
     /// The vertically scrollable portion.
     fn left_bottom_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2);
@@ -96,9 +105,13 @@ impl SplitScroll {
 
                         let mut shrunk_rect = ui.max_rect();
                         shrunk_rect.min += fixed_size;
+                        let content_rect =
+                            Rect::from_min_size(shrunk_rect.min, scroll_content_size);
 
                         let mut shrunk_ui = ui.new_child(UiBuilder::new().max_rect(shrunk_rect));
-                        shrunk_ui.shrink_clip_rect(bottom_right_rect);
+                        // Also clip to the content, so that nothing shows in the gap
+                        // that opens up when the user scrolls past the edge (rubber-banding).
+                        shrunk_ui.shrink_clip_rect(bottom_right_rect.intersect(content_rect));
                         delegate.right_bottom_ui(&mut shrunk_ui, scroll_offset.min.to_vec2());
 
                         // It is very important that the scroll offset is synced between the
@@ -132,8 +145,17 @@ impl SplitScroll {
                 );
                 let mut right_top_ui =
                     ui.new_child(UiBuilder::new().max_rect(right_top_content_rect));
-                right_top_ui.shrink_clip_rect(right_top_outer_rect);
+                right_top_ui
+                    .shrink_clip_rect(right_top_outer_rect.intersect(right_top_content_rect));
                 delegate.right_top_ui(&mut right_top_ui, vec2(scroll_offset.x, 0.0));
+            }
+
+            {
+                // TOP: Both fixed and horizontally scrollable
+                let top_rect = rect.with_max_y(rect.top() + fixed_size.y);
+                let mut top_ui = ui.new_child(UiBuilder::new().max_rect(top_rect));
+                top_ui.shrink_clip_rect(top_rect);
+                delegate.top_ui(&mut top_ui, vec2(scroll_offset.x, 0.0));
             }
 
             {
@@ -147,7 +169,8 @@ impl SplitScroll {
                 );
                 let mut left_bottom_ui =
                     ui.new_child(UiBuilder::new().max_rect(left_bottom_content_rect));
-                left_bottom_ui.shrink_clip_rect(left_bottom_outer_rect);
+                left_bottom_ui
+                    .shrink_clip_rect(left_bottom_outer_rect.intersect(left_bottom_content_rect));
                 delegate.left_bottom_ui(&mut left_bottom_ui, vec2(0.0, scroll_offset.y));
             }
 
