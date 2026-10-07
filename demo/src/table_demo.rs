@@ -207,41 +207,49 @@ impl egui_table::TableDelegate for TableDemo {
 impl TableDemo {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("settings").show(ui, |ui| {
-            ui.label("Columns");
-            ui.add(egui::DragValue::new(&mut self.num_columns).range(12..=usize::MAX));
+            let label = ui.label("Columns");
+            ui.add(egui::DragValue::new(&mut self.num_columns).range(12..=usize::MAX))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Rows");
+            let label = ui.label("Rows");
             let speed = 1.0 + 0.05 * self.num_rows as f32;
             ui.add(
                 egui::DragValue::new(&mut self.num_rows)
                     .speed(speed)
                     .range(0..=10_000),
-            );
+            )
+            .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Height of top row");
-            ui.add(egui::DragValue::new(&mut self.top_row_height).range(0.0..=100.0));
+            let label = ui.label("Height of top row");
+            ui.add(egui::DragValue::new(&mut self.top_row_height).range(0.0..=100.0))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Height of other rows");
-            ui.add(egui::DragValue::new(&mut self.row_height).range(0.0..=100.0));
+            let label = ui.label("Height of other rows");
+            ui.add(egui::DragValue::new(&mut self.row_height).range(0.0..=100.0))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Sticky columns");
-            ui.add(egui::DragValue::new(&mut self.num_sticky_cols));
+            let label = ui.label("Sticky columns");
+            ui.add(egui::DragValue::new(&mut self.num_sticky_cols))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Default column width");
-            ui.add(egui::DragValue::new(&mut self.default_column.current));
+            let label = ui.label("Default column width");
+            ui.add(egui::DragValue::new(&mut self.default_column.current))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Column width range");
+            let label = ui.label("Column width range");
             ui.horizontal(|ui| {
                 let range = &mut self.default_column.range;
-                ui.add(egui::DragValue::new(&mut range.min).range(0.0..=range.max));
+                ui.add(egui::DragValue::new(&mut range.min).range(0.0..=range.max))
+                    .labelled_by(label.id);
                 ui.label("to");
-                ui.add(egui::DragValue::new(&mut range.max).range(range.min..=1000.0));
+                ui.add(egui::DragValue::new(&mut range.max).range(range.min..=1000.0))
+                    .labelled_by(label.id);
             });
             ui.end_row();
 
