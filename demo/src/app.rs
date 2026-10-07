@@ -37,7 +37,7 @@ impl eframe::App for DemoApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::Panel::top("top_panel").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                egui::widgets::global_theme_preference_switch(ui);
+                egui::widgets::global_theme_preference_buttons(ui);
                 ui.add_space(16.0);
 
                 ui.horizontal(|ui| {
