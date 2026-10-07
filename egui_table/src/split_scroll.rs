@@ -87,7 +87,7 @@ impl SplitScroll {
 
             let bottom_right_rect = Rect::from_min_max(rect.min + fixed_size, rect.max);
 
-            let scroll_offset = {
+            let (scroll_offset, overscroll) = {
                 // RIGHT BOTTOM: fully scrollable.
 
                 // The entire thing is a `ScrollArea` that we then paint over.
@@ -103,23 +103,29 @@ impl SplitScroll {
                     .show_viewport(&mut scroll_ui, |ui, scroll_offset| {
                         ui.set_min_size(fixed_size + scroll_content_size);
 
+                        let offset = scroll_offset.min.to_vec2();
+                        let max_offset = (scroll_content_size - scroll_outer_size).max(Vec2::ZERO);
+                        let overscroll = offset - offset.clamp(Vec2::ZERO, max_offset);
+
                         let mut shrunk_rect = ui.max_rect();
                         shrunk_rect.min += fixed_size;
                         let content_rect =
                             Rect::from_min_size(shrunk_rect.min, scroll_content_size);
 
                         let mut shrunk_ui = ui.new_child(UiBuilder::new().max_rect(shrunk_rect));
-                        // Also clip to the content, so that nothing shows in the gap
-                        // that opens up when the user scrolls past the edge (rubber-banding).
-                        shrunk_ui.shrink_clip_rect(bottom_right_rect.intersect(content_rect));
-                        delegate.right_bottom_ui(&mut shrunk_ui, scroll_offset.min.to_vec2());
+                        shrunk_ui.shrink_clip_rect(overscroll_clip_rect(
+                            bottom_right_rect,
+                            content_rect,
+                            overscroll,
+                        ));
+                        delegate.right_bottom_ui(&mut shrunk_ui, offset);
 
                         // It is very important that the scroll offset is synced between the
                         // right-bottom contents of the real scroll area,
                         // and the fake scroll areas we are painting later.
                         // The scroll offset that `ScrollArea` returns could be a newer one
                         // than was used for rendering, so we use the one _actually_ used for rendering instead:
-                        scroll_offset.min
+                        (scroll_offset.min, overscroll)
                     })
                     .inner
             };
@@ -145,8 +151,11 @@ impl SplitScroll {
                 );
                 let mut right_top_ui =
                     ui.new_child(UiBuilder::new().max_rect(right_top_content_rect));
-                right_top_ui
-                    .shrink_clip_rect(right_top_outer_rect.intersect(right_top_content_rect));
+                right_top_ui.shrink_clip_rect(overscroll_clip_rect(
+                    right_top_outer_rect,
+                    right_top_content_rect,
+                    vec2(overscroll.x, 0.0),
+                ));
                 delegate.right_top_ui(&mut right_top_ui, vec2(scroll_offset.x, 0.0));
             }
 
@@ -169,8 +178,11 @@ impl SplitScroll {
                 );
                 let mut left_bottom_ui =
                     ui.new_child(UiBuilder::new().max_rect(left_bottom_content_rect));
-                left_bottom_ui
-                    .shrink_clip_rect(left_bottom_outer_rect.intersect(left_bottom_content_rect));
+                left_bottom_ui.shrink_clip_rect(overscroll_clip_rect(
+                    left_bottom_outer_rect,
+                    left_bottom_content_rect,
+                    vec2(0.0, overscroll.y),
+                ));
                 delegate.left_bottom_ui(&mut left_bottom_ui, vec2(0.0, scroll_offset.y));
             }
 
@@ -178,4 +190,25 @@ impl SplitScroll {
             ui.advance_cursor_after_rect(rect);
         });
     }
+}
+
+/// The clip rect for content shown in `outer`, given how far past the edge of `content`
+/// the user has scrolled (rubber-banding).
+///
+/// The overscrolled edges are clipped to `content`, so that nothing shows in the gap that opens up there.
+/// The other edges are left at `outer`, so that the delegate can still paint
+/// on the edge of its content, e.g. a line along the bottom of the last row.
+fn overscroll_clip_rect(outer: Rect, content: Rect, overscroll: Vec2) -> Rect {
+    let mut clip = outer;
+    if overscroll.x < 0.0 {
+        clip.min.x = clip.min.x.max(content.min.x);
+    } else if 0.0 < overscroll.x {
+        clip.max.x = clip.max.x.min(content.max.x);
+    }
+    if overscroll.y < 0.0 {
+        clip.min.y = clip.min.y.max(content.min.y);
+    } else if 0.0 < overscroll.y {
+        clip.max.y = clip.max.y.min(content.max.y);
+    }
+    clip
 }
