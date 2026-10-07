@@ -555,7 +555,20 @@ impl TableSplitScrollDelegate<'_> {
             .get_row_nr_at_y_offset(&self.egui_ctx, self.id, self.table_delegate, y_offset)
     }
 
-    fn header_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2) {
+    /// The columns that are stuck to the left side.
+    fn sticky_columns(&self) -> Range<usize> {
+        0..self.table.num_sticky_cols
+    }
+
+    /// The columns that scroll horizontally.
+    fn scrolling_columns(&self) -> Range<usize> {
+        self.table.num_sticky_cols..self.table.columns.len()
+    }
+
+    /// Show the header groups that overlap `region_cols`.
+    ///
+    /// A group that spans both sticky and scrolling columns shows in both regions.
+    fn header_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2, region_cols: Range<usize>) {
         for (row_nr, header_row) in self.table.headers.iter().enumerate() {
             let groups = if header_row.groups.is_empty() {
                 (0..self.table.columns.len()).map(|i| i..i + 1).collect()
@@ -569,9 +582,19 @@ impl TableSplitScrollDelegate<'_> {
                 let start = col_range.start;
                 let end = col_range.end;
 
+                if end <= region_cols.start || region_cols.end <= start {
+                    continue; // Shown in the other region
+                }
+
                 let mut header_rect =
                     Rect::from_x_y_ranges(self.col_x[start]..=self.col_x[end], y_range)
                         .translate(-scroll_offset);
+
+                if !self.do_full_sizing_pass
+                    && !ui.clip_rect().x_range().intersects(header_rect.x_range())
+                {
+                    continue; // Not visible
+                }
 
                 if 0 < start
                     && self.table.columns[start - 1].resizable
@@ -645,15 +668,22 @@ impl TableSplitScrollDelegate<'_> {
         }
     }
 
-    fn region_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2, do_prefetch: bool) {
+    /// Show the cells of the visible rows in `region_cols`.
+    fn region_ui(
+        &mut self,
+        ui: &mut Ui,
+        scroll_offset: Vec2,
+        region_cols: Range<usize>,
+        do_prefetch: bool,
+    ) {
         // Used to find the visible range of columns and rows:
         let viewport = ui.clip_rect().translate(scroll_offset);
 
-        let col_range = if self.table.columns.is_empty() || viewport.left() == viewport.right() {
+        let col_range = if region_cols.is_empty() || viewport.left() == viewport.right() {
             0..0
         } else if self.do_full_sizing_pass {
             // We do the UI for all columns during a sizing pass, so we can auto-size ALL columns
-            0..self.table.columns.len()
+            region_cols
         } else {
             // Only paint the visible columns:
             let col_idx_at = |x: f32| -> usize {
@@ -663,7 +693,9 @@ impl TableSplitScrollDelegate<'_> {
                     .at_most(self.table.columns.len() - 1)
             };
 
-            col_idx_at(viewport.min.x)..col_idx_at(viewport.max.x) + 1
+            // Clamp to the region, so a column at the border is not shown in both regions:
+            let end = (col_idx_at(viewport.max.x) + 1).at_most(region_cols.end);
+            col_idx_at(viewport.min.x).clamp(region_cols.start, end)..end
         };
 
         let row_range = if self.table.num_rows == 0 || viewport.top() == viewport.bottom() {
@@ -813,19 +845,19 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
             ui.scroll_to_rect(target_rect, target_align);
         }
 
-        self.region_ui(ui, scroll_offset, true);
+        self.region_ui(ui, scroll_offset, self.scrolling_columns(), true);
     }
 
     fn left_top_ui(&mut self, ui: &mut Ui) {
-        self.header_ui(ui, Vec2::ZERO);
+        self.header_ui(ui, Vec2::ZERO, self.sticky_columns());
     }
 
     fn right_top_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2) {
-        self.header_ui(ui, scroll_offset);
+        self.header_ui(ui, scroll_offset, self.scrolling_columns());
     }
 
     fn left_bottom_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2) {
-        self.region_ui(ui, scroll_offset, false);
+        self.region_ui(ui, scroll_offset, self.sticky_columns(), false);
     }
 
     fn finish(&mut self, ui: &mut Ui) {

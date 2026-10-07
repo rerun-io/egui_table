@@ -96,9 +96,13 @@ impl SplitScroll {
 
                         let mut shrunk_rect = ui.max_rect();
                         shrunk_rect.min += fixed_size;
+                        let content_rect =
+                            Rect::from_min_size(shrunk_rect.min, scroll_content_size);
 
                         let mut shrunk_ui = ui.new_child(UiBuilder::new().max_rect(shrunk_rect));
-                        shrunk_ui.shrink_clip_rect(bottom_right_rect);
+                        // Also clip to the content, so that nothing shows in the gap
+                        // that opens up when the user scrolls past the edge (rubber-banding).
+                        shrunk_ui.shrink_clip_rect(bottom_right_rect.intersect(content_rect));
                         delegate.right_bottom_ui(&mut shrunk_ui, scroll_offset.min.to_vec2());
 
                         // It is very important that the scroll offset is synced between the
@@ -132,7 +136,8 @@ impl SplitScroll {
                 );
                 let mut right_top_ui =
                     ui.new_child(UiBuilder::new().max_rect(right_top_content_rect));
-                right_top_ui.shrink_clip_rect(right_top_outer_rect);
+                right_top_ui
+                    .shrink_clip_rect(right_top_outer_rect.intersect(right_top_content_rect));
                 delegate.right_top_ui(&mut right_top_ui, vec2(scroll_offset.x, 0.0));
             }
 
@@ -147,7 +152,8 @@ impl SplitScroll {
                 );
                 let mut left_bottom_ui =
                     ui.new_child(UiBuilder::new().max_rect(left_bottom_content_rect));
-                left_bottom_ui.shrink_clip_rect(left_bottom_outer_rect);
+                left_bottom_ui
+                    .shrink_clip_rect(left_bottom_outer_rect.intersect(left_bottom_content_rect));
                 delegate.left_bottom_ui(&mut left_bottom_ui, vec2(0.0, scroll_offset.y));
             }
 
