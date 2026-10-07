@@ -43,10 +43,19 @@ pub struct SplitScroll {
 /// The contents of a [`SplitScroll`].
 pub trait SplitScrollDelegate {
     /// The fixed portion of the top left corner.
-    fn left_top_ui(&mut self, ui: &mut Ui);
+    fn left_top_ui(&mut self, _ui: &mut Ui) {}
 
     /// The horizontally scrollable portion.
-    fn right_top_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2);
+    fn right_top_ui(&mut self, _ui: &mut Ui, _scroll_offset: Vec2) {}
+
+    /// The whole top, both the fixed and the horizontally scrollable portion.
+    ///
+    /// Use this for content that spans both portions,
+    /// e.g. a table header group that covers both sticky and scrolling columns.
+    /// For other content, prefer [`Self::left_top_ui`] and [`Self::right_top_ui`].
+    ///
+    /// Called after [`Self::left_top_ui`] and [`Self::right_top_ui`].
+    fn top_ui(&mut self, _ui: &mut Ui, _scroll_offset: Vec2) {}
 
     /// The vertically scrollable portion.
     fn left_bottom_ui(&mut self, ui: &mut Ui, scroll_offset: Vec2);
@@ -139,6 +148,14 @@ impl SplitScroll {
                 right_top_ui
                     .shrink_clip_rect(right_top_outer_rect.intersect(right_top_content_rect));
                 delegate.right_top_ui(&mut right_top_ui, vec2(scroll_offset.x, 0.0));
+            }
+
+            {
+                // TOP: Both fixed and horizontally scrollable
+                let top_rect = rect.with_max_y(rect.top() + fixed_size.y);
+                let mut top_ui = ui.new_child(UiBuilder::new().max_rect(top_rect));
+                top_ui.shrink_clip_rect(top_rect);
+                delegate.top_ui(&mut top_ui, vec2(scroll_offset.x, 0.0));
             }
 
             {
