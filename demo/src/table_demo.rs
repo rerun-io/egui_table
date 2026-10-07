@@ -51,7 +51,7 @@ impl TableDemo {
             .get(&row_nr)
             .copied()
             .unwrap_or_default();
-        let expandedness = ui.animate_bool(Id::new(row_nr), is_expanded);
+        let expandedness = ui.animate_bool(Id::unique(row_nr), is_expanded);
 
         ui.vertical(|ui| {
             if col_nr == 0 {
@@ -196,7 +196,7 @@ impl egui_table::TableDelegate for TableDemo {
         self.is_row_expanded
             .range(0..row_nr)
             .map(|(expanded_row_nr, expanded)| {
-                let how_expanded = ctx.animate_bool(Id::new(expanded_row_nr), *expanded);
+                let how_expanded = ctx.animate_bool(Id::unique(expanded_row_nr), *expanded);
                 how_expanded * fully_expanded_row_height
             })
             .sum::<f32>()
@@ -207,41 +207,49 @@ impl egui_table::TableDelegate for TableDemo {
 impl TableDemo {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         egui::Grid::new("settings").show(ui, |ui| {
-            ui.label("Columns");
-            ui.add(egui::DragValue::new(&mut self.num_columns).range(12..=usize::MAX));
+            let label = ui.label("Columns");
+            ui.add(egui::DragValue::new(&mut self.num_columns).range(12..=usize::MAX))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Rows");
+            let label = ui.label("Rows");
             let speed = 1.0 + 0.05 * self.num_rows as f32;
             ui.add(
                 egui::DragValue::new(&mut self.num_rows)
                     .speed(speed)
                     .range(0..=10_000),
-            );
+            )
+            .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Height of top row");
-            ui.add(egui::DragValue::new(&mut self.top_row_height).range(0.0..=100.0));
+            let label = ui.label("Height of top row");
+            ui.add(egui::DragValue::new(&mut self.top_row_height).range(0.0..=100.0))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Height of other rows");
-            ui.add(egui::DragValue::new(&mut self.row_height).range(0.0..=100.0));
+            let label = ui.label("Height of other rows");
+            ui.add(egui::DragValue::new(&mut self.row_height).range(0.0..=100.0))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Sticky columns");
-            ui.add(egui::DragValue::new(&mut self.num_sticky_cols));
+            let label = ui.label("Sticky columns");
+            ui.add(egui::DragValue::new(&mut self.num_sticky_cols))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Default column width");
-            ui.add(egui::DragValue::new(&mut self.default_column.current));
+            let label = ui.label("Default column width");
+            ui.add(egui::DragValue::new(&mut self.default_column.current))
+                .labelled_by(label.id);
             ui.end_row();
 
-            ui.label("Column width range");
+            let label = ui.label("Column width range");
             ui.horizontal(|ui| {
                 let range = &mut self.default_column.range;
-                ui.add(egui::DragValue::new(&mut range.min).range(0.0..=range.max));
+                ui.add(egui::DragValue::new(&mut range.min).range(0.0..=range.max))
+                    .labelled_by(label.id);
                 ui.label("to");
-                ui.add(egui::DragValue::new(&mut range.max).range(range.min..=1000.0));
+                ui.add(egui::DragValue::new(&mut range.max).range(range.min..=1000.0))
+                    .labelled_by(label.id);
             });
             ui.end_row();
 
@@ -266,7 +274,7 @@ impl TableDemo {
             ui.end_row();
         });
 
-        let id_salt = Id::new("table_demo");
+        let id_salt = egui::IdSalt::new("table_demo");
         let state_id = egui_table::Table::new().id_salt(id_salt).get_id(ui); // Note: must be here (in the correct outer `ui` scope) to be correct.
 
         ui.horizontal(|ui| {

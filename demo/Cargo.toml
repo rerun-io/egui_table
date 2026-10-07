@@ -20,6 +20,7 @@ eframe = { workspace = true, default-features = false, features = [
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
+    "system_fonts",  # Load system fonts for glyphs the default fonts lack, e.g. emoji (native only).
     "wayland",       # Required for Linux and CI.
 ] }
 log.workspace = true
@@ -35,4 +36,6 @@ wasm-bindgen-futures.workspace = true
 web-sys.workspace = true              # to access the DOM (to hide the loading text)
 
 [dev-dependencies]
+# Bundle emoji fonts, because tests have no system fonts to fall back on:
+egui = { workspace = true, features = ["monochrome_emoji_fonts"] }
 egui_kittest = { workspace = true, features = ["wgpu", "snapshot", "eframe"] }
