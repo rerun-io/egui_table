@@ -1,3 +1,6 @@
+### NOTE: `egui_table` was moved into a monorepo at [rerun-io/egui_crates](https://github.com/rerun-io/egui_crates/tree/main/crates/egui_table). Please open new PRs and issues over there.
+
+
 # ☰ `egui_table`
 
 [<img alt="github" src="https://img.shields.io/badge/github-rerun_io/egui_table-8da0cb?logo=github" height="20">](https://github.com/rerun-io/egui_table)
